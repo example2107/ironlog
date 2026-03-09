@@ -321,12 +321,23 @@ body{background:#0a0a0f;}
 
 /* AUTH */
 .auth-page{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
-.auth-box{background:var(--ink2);border:1px solid var(--line);border-radius:20px;padding:32px 28px;width:100%;max-width:380px;}
-.auth-logo{text-align:center;margin-bottom:24px;}
-.auth-title{font-family:'Bebas Neue',sans-serif;font-size:28px;letter-spacing:2px;color:var(--snow);margin-bottom:20px;text-align:center;}
+.auth-box{background:var(--ink2);border:1px solid var(--line);border-top:2px solid var(--acid);border-radius:20px;padding:36px 32px;width:100%;max-width:400px;box-shadow:0 24px 60px rgba(0,0,0,0.4);}
+.auth-logo{text-align:center;margin-bottom:28px;}
+.auth-logo .g-logo-main{font-size:26px;letter-spacing:4px;}
+.auth-logo .g-logo-sub{font-size:11px;letter-spacing:2px;}
+.auth-title{font-family:'DM Sans',sans-serif;font-size:22px;font-weight:700;color:var(--snow);margin-bottom:5px;text-align:center;letter-spacing:-0.3px;}
+.auth-sub{font-size:13px;color:var(--steel);text-align:center;margin-bottom:24px;}
 .auth-err{color:var(--red);font-size:13px;margin:0 0 12px;text-align:center;background:var(--red-dim);border-radius:8px;padding:10px;}
 .auth-switch{width:100%;background:transparent;border:none;color:var(--steel);font-family:'DM Sans',sans-serif;font-size:13px;cursor:pointer;margin-top:14px;padding:8px;text-align:center;transition:color 0.15s;}
 .auth-switch:hover{color:var(--snow2);}
+.auth-box .g-field label{font-size:12px;font-weight:500;letter-spacing:0;text-transform:none;color:var(--snow2);}
+.auth-box .g-field input{background:var(--ink3);border-color:var(--line2);font-size:15px;}
+.auth-box .g-field input::placeholder{color:#4a4a6a;opacity:1;}
+.auth-pwd-wrap{position:relative;}
+.auth-pwd-wrap input{padding-right:44px;}
+.auth-pwd-toggle{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#4a4a6a;padding:4px;display:flex;align-items:center;transition:color 0.15s;}
+.auth-pwd-toggle:hover{color:var(--snow2);}
+.auth-box .g-btn.acid{font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;letter-spacing:0.3px;}
 
 /* NAV USER */
 .g-nav-user{display:flex;align-items:center;gap:8px;flex-shrink:0;}
@@ -398,6 +409,7 @@ export default function App() {
   const [authForm,    setAuthForm]    = useState({ login: "", password: "" });
   const [authError,   setAuthError]   = useState(null);
   const [authBusy,    setAuthBusy]    = useState(false);
+  const [showPwd,     setShowPwd]     = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -827,7 +839,8 @@ export default function App() {
             <div className="g-logo-main">IRON LOG</div>
             <div className="g-logo-sub">Workout Tracker</div>
           </div>
-          <div className="auth-title">{authMode === "login" ? "Вход" : "Регистрация"}</div>
+          <div className="auth-title">{authMode === "login" ? "Добро пожаловать" : "Создать аккаунт"}</div>
+          <div className="auth-sub">{authMode === "login" ? "Войдите, чтобы продолжить" : "Начните отслеживать тренировки"}</div>
           <div className="g-field">
             <label>Логин</label>
             <input type="text" placeholder="Ваш логин" value={authForm.login} autoCapitalize="none"
@@ -836,13 +849,21 @@ export default function App() {
           </div>
           <div className="g-field">
             <label>Пароль</label>
-            <input type="password" placeholder="Минимум 6 символов" value={authForm.password}
-              onChange={e => setAuthForm(p => ({ ...p, password: e.target.value }))}
-              onKeyDown={e => e.key === "Enter" && doAuth(authMode)}/>
+            <div className="auth-pwd-wrap">
+              <input type={showPwd ? "text" : "password"} placeholder="Минимум 6 символов" value={authForm.password}
+                onChange={e => setAuthForm(p => ({ ...p, password: e.target.value }))}
+                onKeyDown={e => e.key === "Enter" && doAuth(authMode)}/>
+              <button type="button" className="auth-pwd-toggle" onClick={() => setShowPwd(v => !v)} tabIndex={-1}>
+                {showPwd
+                  ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                }
+              </button>
+            </div>
           </div>
           {authError && <div className="auth-err">{authError}</div>}
           <button className="g-btn acid full" onClick={() => doAuth(authMode)} disabled={authBusy} style={{marginTop:8}}>
-            {authBusy ? "…" : authMode === "login" ? "ВОЙТИ" : "СОЗДАТЬ АККАУНТ"}
+            {authBusy ? "…" : authMode === "login" ? "Войти" : "Создать аккаунт"}
           </button>
           <button className="auth-switch"
             onClick={() => { setAuthMode(authMode === "login" ? "register" : "login"); setAuthError(null); }}>
