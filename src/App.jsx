@@ -56,7 +56,7 @@ const DEFAULT_EXERCISES = [
 
 // ─── STYLES ──────────────────────────────────────────────────────────────────
 const G = `
-@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
 :root {
   --ink:#0a0a0f; --ink2:#13131c; --ink3:#1c1c28; --ink4:#24243a;
   --line:#2a2a42; --line2:#353555;
@@ -111,13 +111,13 @@ body{background:#0a0a0f;}
 /* BUTTONS */
 .g-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;border:none;border-radius:12px;
   cursor:pointer;font-family:'DM Sans',sans-serif;font-weight:600;transition:all 0.17s;white-space:nowrap;}
-.g-btn.acid{background:var(--acid);color:var(--ink);font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;padding:16px 24px;}
+.g-btn.acid{background:var(--acid);color:var(--ink);font-family:'DM Sans',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.2px;padding:16px 24px;}
 .g-btn.acid:hover{background:#d8ff1a;box-shadow:0 6px 28px rgba(200,255,0,0.22);transform:translateY(-1px);}
 .g-btn.ghost{background:transparent;color:var(--snow2);border:1px solid var(--line2);font-size:14px;padding:12px 18px;}
 .g-btn.ghost:hover{background:var(--ink3);color:var(--snow);}
-.g-btn.red{background:var(--red);color:#fff;font-family:'Bebas Neue',sans-serif;font-size:16px;letter-spacing:1.5px;padding:14px 22px;}
+.g-btn.red{background:var(--red);color:#fff;font-family:'DM Sans',sans-serif;font-weight:700;font-size:14px;letter-spacing:0.2px;padding:14px 22px;}
 .g-btn.red:hover{background:#ff5252;}
-.g-btn.green{background:var(--green);color:var(--ink);font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:2px;padding:16px 24px;}
+.g-btn.green{background:var(--green);color:var(--ink);font-family:'DM Sans',sans-serif;font-weight:700;font-size:15px;letter-spacing:0.2px;padding:16px 24px;}
 .g-btn.green:hover{background:#33ffaa;box-shadow:0 6px 28px rgba(26,255,140,0.22);transform:translateY(-1px);}
 .g-btn.sm{font-size:13px;padding:8px 14px;font-family:'DM Sans',sans-serif;letter-spacing:0;border-radius:9px;}
 .g-btn.full{width:100%;}
@@ -131,14 +131,14 @@ body{background:#0a0a0f;}
 .ib:active{opacity:0.7;}
 
 /* SECTION HEADER */
-.g-sh{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;color:var(--snow);
+.g-sh{font-family:'DM Sans',sans-serif;font-weight:800;font-size:22px;letter-spacing:-0.3px;color:var(--snow);
   margin-bottom:14px;display:flex;align-items:center;gap:10px;}
 .g-sh::after{content:'';flex:1;height:1px;background:var(--line);}
 
 /* CARDS */
 .g-card{background:var(--ink2);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:12px;}
 .g-card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line);}
-.g-card-t{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;color:var(--acid);}
+.g-card-t{font-family:'DM Sans',sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.2px;color:var(--acid);}
 
 /* EXERCISE LIST */
 .g-group{background:var(--ink2);border:1px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden;}
@@ -173,7 +173,7 @@ body{background:#0a0a0f;}
 
 /* FORM FIELDS */
 .g-field{margin-bottom:14px;}
-.g-field label{display:block;font-size:11px;font-weight:700;color:var(--steel);text-transform:uppercase;letter-spacing:1.2px;margin-bottom:7px;}
+.g-field label{display:block;font-size:12px;font-weight:600;color:var(--steel);text-transform:none;letter-spacing:0;margin-bottom:7px;}
 .g-field input,.g-field select,.g-field textarea{width:100%;padding:11px 13px;background:var(--ink3);border:1px solid var(--line);
   border-radius:10px;color:var(--snow);font-size:16px;font-family:'DM Sans',sans-serif;transition:border-color 0.14s;
   -webkit-appearance:none;}
@@ -221,7 +221,7 @@ body{background:#0a0a0f;}
 .g-witem:hover{border-color:rgba(200,255,0,0.28);}
 .g-witem:active{border-color:rgba(200,255,0,0.28);}
 .g-witem-date{font-size:12px;color:var(--steel);margin-bottom:3px;}
-.g-witem-n{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--acid);letter-spacing:1px;}
+.g-witem-n{font-family:'DM Sans',sans-serif;font-weight:800;font-size:18px;color:var(--acid);letter-spacing:-0.2px;}
 .g-witem-list{font-size:12px;color:var(--snow2);margin-top:4px;line-height:1.5;}
 .g-hist-ex{padding:11px 13px;background:var(--ink3);border-radius:9px;margin-bottom:7px;border-left:3px solid var(--acid);}
 .g-hist-name{font-size:14px;font-weight:500;color:var(--snow);margin-bottom:3px;}
@@ -232,7 +232,7 @@ body{background:#0a0a0f;}
 /* OVERLAY / MODAL */
 .g-ov{position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:999;display:flex;align-items:center;justify-content:center;padding:18px;}
 .g-modal{background:var(--ink2);border:1px solid var(--line);border-radius:18px;padding:26px;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;}
-.g-modal-t{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px;color:var(--acid);margin-bottom:6px;}
+.g-modal-t{font-family:'DM Sans',sans-serif;font-weight:800;font-size:20px;letter-spacing:-0.3px;color:var(--acid);margin-bottom:6px;}
 .g-modal-sub{font-size:12px;color:var(--steel);margin-bottom:18px;}
 .g-modal-body{background:var(--ink3);border-radius:10px;padding:14px;font-size:12px;color:var(--snow2);
   white-space:pre-wrap;font-family:monospace;line-height:1.8;margin-bottom:16px;max-height:300px;overflow-y:auto;}
@@ -266,7 +266,7 @@ body{background:#0a0a0f;}
 .lib-actions{display:flex;gap:5px;flex-shrink:0;margin-top:1px;}
 .lib-divider{height:1px;background:var(--line);margin:16px 0;}
 .lib-form-box{background:var(--ink3);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px;}
-.lib-form-title{font-family:'Bebas Neue',sans-serif;font-size:17px;letter-spacing:1px;color:var(--acid);margin-bottom:12px;}
+.lib-form-title{font-family:'DM Sans',sans-serif;font-weight:700;font-size:16px;letter-spacing:-0.1px;color:var(--acid);margin-bottom:12px;}
 .drag-handle{cursor:grab;color:var(--steel);font-size:18px;padding:2px 6px;user-select:none;
   flex-shrink:0;touch-action:none;-webkit-user-select:none;}
 .drag-handle:active{cursor:grabbing;color:var(--acid);}
@@ -911,7 +911,7 @@ export default function App() {
                 <div className="g-stat-l">Последняя тренировка</div>
               </div>
             </div>
-            <Btn c="acid" full onClick={startCreate}>+ НАЧАТЬ ТРЕНИРОВКУ</Btn>
+            <Btn c="acid" full onClick={startCreate}>+ Начать тренировку</Btn>
             <div className="g-sp"/>
             {workouts.length === 0
               ? <div className="g-empty"><span className="g-empty-i">🏋️</span>Нет тренировок — создайте первую!</div>
@@ -984,7 +984,7 @@ export default function App() {
             })}
             <div className="g-row" style={{marginTop:18}}>
               <Btn c="ghost" onClick={() => setScreen("home")}>← Назад</Btn>
-              <Btn c="acid" onClick={doStart} style={{flex:1}}>НАЧАТЬ ТРЕНИРОВКУ →</Btn>
+              <Btn c="acid" onClick={doStart} style={{flex:1}}>Начать тренировку →</Btn>
             </div>
           </>}
 
@@ -1107,7 +1107,7 @@ export default function App() {
         {detailModal && (
           <div className="g-ov" onMouseDown={() => setDetailModal(null)}>
             <div className="g-modal" onMouseDown={e => e.stopPropagation()}>
-              <div className="g-modal-t">ДЕТАЛИ</div>
+              <div className="g-modal-t">Детали</div>
               <div className="g-modal-body">{detailModal}</div>
               <div className="g-modal-acts">
                 <Btn c="ghost" sm onClick={() => navigator.clipboard?.writeText(detailModal).then(() => showToast("✓ Скопировано!"))}>📋 Копировать</Btn>
@@ -1121,7 +1121,7 @@ export default function App() {
         {bodyWeightModal && (
           <div className="g-ov" style={{zIndex:1050}}>
             <div className="confirm-box" style={{maxWidth:340}}>
-              <div className="g-modal-t" style={{fontSize:20}}>ВЕС ТЕЛА</div>
+              <div className="g-modal-t" style={{fontSize:20}}>Вес тела</div>
               <div style={{fontSize:13,color:"var(--snow2)",marginBottom:16,lineHeight:1.5}}>
                 Укажите ваш вес тела на момент тренировки (необязательно)
               </div>
@@ -1151,7 +1151,7 @@ export default function App() {
         {libOpen && (
           <div className="g-ov" onMouseDown={() => { setLibOpen(false); setEditingEx(null); setEditingGrp(null); }}>
             <div className="g-modal" style={{maxWidth:620}} onMouseDown={e => e.stopPropagation()}>
-              <div className="g-modal-t">БАЗА УПРАЖНЕНИЙ</div>
+              <div className="g-modal-t">База упражнений</div>
               <div className="g-modal-sub">{totalEx} упражнений · {exercises.length} групп · ⠿ перетащить</div>
 
               {exercises.map(group => (
@@ -1291,7 +1291,7 @@ export default function App() {
                   <label>Комментарий</label>
                   <textarea rows={2} placeholder="Заметка..." value={exForm.c} onChange={e => upEx("c", e.target.value)}/>
                 </div>
-                <Btn c="acid" sm onClick={handleAddExercise}>+ ДОБАВИТЬ УПРАЖНЕНИЕ</Btn>
+                <Btn c="acid" sm onClick={handleAddExercise}>+ Добавить упражнение</Btn>
               </div>
 
               <div className="lib-form-box">
@@ -1301,7 +1301,7 @@ export default function App() {
                   <input type="text" placeholder="Пример: Предплечья" value={grpForm.name}
                     onChange={e => setGrpForm({ name: e.target.value })}/>
                 </div>
-                <Btn c="acid" sm onClick={handleAddGroup}>+ ДОБАВИТЬ ГРУППУ</Btn>
+                <Btn c="acid" sm onClick={handleAddGroup}>+ Добавить группу</Btn>
               </div>
 
               <div className="g-modal-acts" style={{marginTop:16}}>
