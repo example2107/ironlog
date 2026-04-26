@@ -805,6 +805,10 @@ export default function App() {
     setExpandedWorkouts(p => ({ ...p, [id]: !p[id] }));
 
   const openDetails = wo => {
+    setDetailModal(formatWorkoutDetails(wo));
+  };
+
+  const formatWorkoutDetails = wo => {
     let t = `📋 ТРЕНИРОВКА ОТ ${fmtDate(wo.date)}\n`;
     if (wo.bodyWeight) t += `⚖ Вес тела: ${wo.bodyWeight} кг\n`;
     t += `${"═".repeat(34)}\n\n`;
@@ -816,7 +820,28 @@ export default function App() {
       if (e.comment) t += `   💬 ${e.comment}\n`;
       t += "\n";
     });
-    setDetailModal(t);
+    return t;
+  };
+
+  const exportWorkouts = () => {
+    if (!workouts.length) {
+      showToast("История пуста");
+      return;
+    }
+    const text = [...workouts]
+      .sort((a, b) => new Date(a.date) - new Date(b.date) || a.id - b.id)
+      .map(formatWorkoutDetails)
+      .join("\n\n");
+    const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ironlog-workouts-${todayISO()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    showToast("✓ Экспорт скачан");
   };
 
   const delWo = id => confirm("Удалить тренировку?", () => {
@@ -1426,20 +1451,14 @@ export default function App() {
           {/* HISTORY */}
           {screen === "history" && <>
             <Nav label="История"/>
-            <div className="g-sh">История</div>
+            <div className="g-between" style={{alignItems:"center",marginBottom:14}}>
+              <div className="g-sh" style={{marginBottom:0}}>История</div>
+              {workouts.length > 0 && <Btn c="ghost" sm onClick={exportWorkouts}>Экспортировать данные тренировок</Btn>}
+            </div>
             {workouts.length === 0
               ? <div className="g-empty"><span className="g-empty-i">📭</span>История пуста</div>
-              : (() => {
-                  const byDate = {};
-                  [...workouts].reverse().forEach(w => {
-                    const d = new Date(w.date).toLocaleDateString("ru-RU",{day:"2-digit",month:"long",year:"numeric"});
-                    if (!byDate[d]) byDate[d] = [];
-                    byDate[d].push(w);
-                  });
-                  return Object.entries(byDate).map(([d, ws]) => (
-                    <div key={d} style={{marginBottom:22}}>
-                      <div className="g-dg">{d}</div>
-                      {ws.map(w => {
+              : <div>
+                      {[...workouts].reverse().map(w => {
                         const expanded = !!expandedWorkouts[w.id];
                         return (
                         <div key={w.id} className="g-card">
@@ -1480,8 +1499,6 @@ export default function App() {
                       );
                     })}
                     </div>
-                  ));
-                })()
             }
           </>}
         </div>
