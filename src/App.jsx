@@ -522,6 +522,7 @@ export default function App() {
   const execCardRefs = useRef({});
   const libModalRef = useRef(null);
   const autoScrollRef = useRef(null);
+  const autoScrollSpeedRef = useRef(0);
 
   const upEx = (k, v) => setExForm(p => ({ ...p, [k]: v }));
 
@@ -532,6 +533,7 @@ export default function App() {
   };
 
   const stopDragAutoScroll = () => {
+    autoScrollSpeedRef.current = 0;
     if (autoScrollRef.current) {
       cancelAnimationFrame(autoScrollRef.current);
       autoScrollRef.current = null;
@@ -550,10 +552,20 @@ export default function App() {
     } else if (clientY > rect.bottom - edge) {
       speed = Math.ceil(((clientY - (rect.bottom - edge)) / edge) * maxSpeed);
     }
-    stopDragAutoScroll();
-    if (!speed) return;
+    autoScrollSpeedRef.current = speed;
+    if (!speed) {
+      stopDragAutoScroll();
+      return;
+    }
+    if (autoScrollRef.current) return;
     const step = () => {
-      el.scrollTop += speed;
+      const current = libModalRef.current;
+      const currentSpeed = autoScrollSpeedRef.current;
+      if (!current || !currentSpeed) {
+        stopDragAutoScroll();
+        return;
+      }
+      current.scrollTop += currentSpeed;
       autoScrollRef.current = requestAnimationFrame(step);
     };
     autoScrollRef.current = requestAnimationFrame(step);
