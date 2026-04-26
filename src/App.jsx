@@ -566,6 +566,13 @@ export default function App() {
         return;
       }
       current.scrollTop += currentSpeed;
+      if (current.scrollTop <= 0 && currentSpeed < 0) {
+        window.scrollBy(0, currentSpeed);
+        document.scrollingElement?.scrollBy?.(0, currentSpeed);
+      } else if (current.scrollTop + current.clientHeight >= current.scrollHeight - 1 && currentSpeed > 0) {
+        window.scrollBy(0, currentSpeed);
+        document.scrollingElement?.scrollBy?.(0, currentSpeed);
+      }
       autoScrollRef.current = requestAnimationFrame(step);
     };
     autoScrollRef.current = requestAnimationFrame(step);
@@ -1213,7 +1220,7 @@ export default function App() {
     ghost.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;
       opacity:0.85;pointer-events:none;z-index:9999;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.5);transform:scale(1.02);`;
     document.body.appendChild(ghost);
-    touchDrag.current = { type: "group", groupName, ghost, offsetX: touch.clientX - rect.left, offsetY: touch.clientY - rect.top, lastOver: undefined };
+    touchDrag.current = { type: "group", groupName, ghost, width: rect.width, height: rect.height, offsetX: touch.clientX - rect.left, offsetY: touch.clientY - rect.top, lastOver: undefined };
     setDraggingGroup(groupName);
     e.preventDefault();
 
@@ -1221,8 +1228,13 @@ export default function App() {
       const td = touchDrag.current; if (!td || td.type !== "group") return;
       ev.preventDefault();
       const t = ev.touches[0];
-      td.ghost.style.left = (t.clientX - td.offsetX) + "px";
-      td.ghost.style.top = (t.clientY - td.offsetY) + "px";
+      updateDragAutoScroll(t.clientY);
+      const margin = 8;
+      const maxTop = Math.max(margin, window.innerHeight - td.height - margin);
+      const left = Math.min(Math.max(t.clientX - td.offsetX, margin), Math.max(margin, window.innerWidth - td.width - margin));
+      const top = Math.min(Math.max(t.clientY - td.offsetY, margin), maxTop);
+      td.ghost.style.left = left + "px";
+      td.ghost.style.top = top + "px";
       td.ghost.style.display = "none";
       const el = document.elementFromPoint(t.clientX, t.clientY);
       td.ghost.style.display = "";
