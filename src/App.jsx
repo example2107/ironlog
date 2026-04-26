@@ -231,15 +231,25 @@ body{background:#0a0a0f;}
 .g-witem-date{font-size:12px;color:var(--steel);margin-bottom:3px;}
 .g-witem-n{font-family:'DM Sans',sans-serif;font-weight:800;font-size:18px;color:var(--acid);letter-spacing:-0.2px;}
 .g-witem-list{font-size:12px;color:var(--snow2);margin-top:4px;line-height:1.5;}
+.g-hist-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.g-hist-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
 .g-hist-ex{padding:11px 13px;background:var(--ink3);border-radius:9px;margin-bottom:7px;border-left:3px solid var(--acid);}
 .g-hist-name{font-size:14px;font-weight:500;color:var(--snow);margin-bottom:3px;}
 .g-hist-meta{font-size:12px;color:var(--steel);}
 .g-hist-note{font-size:11px;color:var(--amber);margin-top:3px;font-style:italic;}
+.hist-edit-ex{background:var(--ink3);border:1px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;}
+.hist-edit-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.hist-edit-title{font-size:15px;font-weight:700;color:var(--snow);line-height:1.35;}
 .g-dg{font-size:11px;font-weight:700;color:var(--steel);text-transform:uppercase;letter-spacing:2px;margin-bottom:10px;margin-top:6px;}
 
 /* OVERLAY / MODAL */
 .g-ov{position:fixed;inset:0;background:rgba(0,0,0,0.82);z-index:999;display:flex;align-items:center;justify-content:center;padding:18px;}
 .g-modal{background:var(--ink2);border:1px solid var(--line);border-radius:18px;padding:26px;width:100%;max-width:560px;max-height:88vh;overflow-y:auto;}
+.g-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:6px;}
+.g-modal-head .g-modal-t{margin-bottom:0;}
+.modal-x{width:34px;height:34px;border-radius:9px;background:var(--ink3);border:1px solid var(--line2);color:var(--snow2);
+  font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.modal-x:hover{color:var(--snow);border-color:rgba(200,255,0,0.35);}
 .g-modal-t{font-family:'DM Sans',sans-serif;font-weight:800;font-size:20px;letter-spacing:-0.3px;color:var(--acid);margin-bottom:6px;}
 .g-modal-sub{font-size:12px;color:var(--steel);margin-bottom:18px;}
 .g-modal-body{background:var(--ink3);border-radius:10px;padding:14px;font-size:12px;color:var(--snow2);
@@ -262,6 +272,8 @@ body{background:#0a0a0f;}
 .lib-section{margin-bottom:6px;}
 .lib-group-row{display:flex;align-items:center;gap:6px;padding:10px 12px;
   background:var(--ink3);border-radius:10px;margin-bottom:4px;}
+.lib-group-row.dragging{opacity:0.35;}
+.lib-group-row.drag-over{background:rgba(200,255,0,0.06);outline:1px solid rgba(200,255,0,0.25);}
 .lib-group-name{font-size:13px;font-weight:600;color:var(--snow2);text-transform:uppercase;letter-spacing:0.8px;flex:1;min-width:0;}
 .lib-ex-row{display:flex;align-items:flex-start;gap:6px;padding:9px 10px 9px 14px;
   background:rgba(255,255,255,0.02);border-radius:8px;margin-bottom:3px;border-left:2px solid var(--line2);transition:background 0.12s;}
@@ -282,6 +294,10 @@ body{background:#0a0a0f;}
 .drop-zone.active{height:32px;background:rgba(200,255,0,0.08);border:1px dashed rgba(200,255,0,0.35);border-radius:8px;
   display:flex;align-items:center;justify-content:center;}
 .drop-zone.active::after{content:'↓';color:var(--acid);font-size:14px;font-weight:700;}
+.group-drop-zone{height:6px;border-radius:4px;margin:3px 0;transition:all 0.12s;}
+.group-drop-zone.active{height:34px;background:rgba(200,255,0,0.08);border:1px dashed rgba(200,255,0,0.35);
+  display:flex;align-items:center;justify-content:center;}
+.group-drop-zone.active::after{content:'переместить сюда';color:var(--acid);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
 .edit-box{background:var(--ink4);border:1px solid var(--line2);border-radius:10px;padding:14px;margin:6px 0 8px 0;}
 
 /* MISC */
@@ -478,6 +494,8 @@ export default function App() {
   const [replaceModal, setReplaceModal] = useState(null); // { exId, groupName }
   const [finishPrompt, setFinishPrompt] = useState(false);
   const [finishBusy, setFinishBusy] = useState(false);
+  const [editingWorkout, setEditingWorkout] = useState(null);
+  const [expandedWorkouts, setExpandedWorkouts] = useState({});
 
   // confirm dialog
   const [confirmDialog, setConfirmDialog] = useState(null);
@@ -568,6 +586,8 @@ export default function App() {
   const lastWo     = workouts.length ? workouts[workouts.length - 1] : null;
   const lastWoDate = lastWo ? fmtDate(lastWo.date) : "—";
 
+  const countsForLibrary = (wo) => wo?.libraryIncluded !== false;
+
   const findEx = id => {
     for (const g of exercises) { const e = g.exercises.find(x => x.id === id); if (e) return e; }
     return null;
@@ -575,6 +595,47 @@ export default function App() {
 
   const findGroupByExercise = id =>
     exercises.find(g => g.exercises.some(e => e.id === id));
+
+  const recalcExerciseLibrary = (workoutArr, baseExercises = exercises, affectedIds = null) => {
+    const affected = affectedIds ? new Set(affectedIds) : null;
+    const latestByEx = new Map();
+    workoutArr.filter(countsForLibrary).forEach(wo => {
+      (wo.exercises || []).forEach(done => {
+        if (affected && !affected.has(done.id)) return;
+        const prev = latestByEx.get(done.id);
+        const prevTime = prev ? new Date(prev.wo.date).getTime() : -Infinity;
+        const nextTime = new Date(wo.date).getTime();
+        if (!prev || nextTime > prevTime || (nextTime === prevTime && wo.id > prev.wo.id)) {
+          latestByEx.set(done.id, { wo, done });
+        }
+      });
+    });
+    return baseExercises.map(group => ({
+      ...group,
+      exercises: group.exercises.map(ex => {
+        if (affected && !affected.has(ex.id)) return ex;
+        const latest = latestByEx.get(ex.id);
+        if (!latest) {
+          return { ...ex, last_weight: null, last_reps: null, last_date: null, comment: null };
+        }
+        const { weight, reps } = setsToSummary(latest.done.sets || []);
+        return {
+          ...ex,
+          last_weight: weight,
+          last_reps: reps,
+          last_date: latest.wo.date,
+          comment: String(latest.done.comment || "").trim() || null,
+        };
+      }),
+    }));
+  };
+
+  const saveWorkoutsAndRecalc = async (nextWorkouts, affectedIds) => {
+    const savedWorkouts = await saveWo(nextWorkouts);
+    if (!savedWorkouts) return false;
+    const savedExercises = await saveEx(recalcExerciseLibrary(nextWorkouts, exercises, affectedIds));
+    return savedExercises;
+  };
 
   // ── WORKOUT ──────────────────────────────────────────────────────────────
   const startCreate = () => {
@@ -695,7 +756,7 @@ export default function App() {
   const completeWorkout = async (updateLibrary) => {
     if (!cur || finishBusy) return;
     setFinishBusy(true);
-    const wo = { ...cur, completed: true };
+    const wo = { ...cur, completed: true, libraryIncluded: updateLibrary };
     const savedWorkout = await saveWo([...workouts, wo]);
     if (!savedWorkout) {
       setFinishBusy(false);
@@ -703,20 +764,8 @@ export default function App() {
     }
     let librarySaved = true;
     if (updateLibrary) {
-      const updEx = exercises.map(g => ({
-        ...g, exercises: g.exercises.map(ex => {
-          const done = cur.exercises.find(e => e.id === ex.id);
-          if (!done) return ex;
-          const { weight, reps } = setsToSummary(done.sets);
-          return {
-            ...ex,
-            last_weight: weight,
-            last_reps: reps,
-            last_date: cur.date,
-            comment: String(done.comment || "").trim() || null,
-          };
-        }),
-      }));
+      const affectedIds = cur.exercises.map(e => e.id);
+      const updEx = recalcExerciseLibrary([...workouts, wo], exercises, affectedIds);
       librarySaved = await saveEx(updEx);
     }
     setFinishPrompt(false);
@@ -738,7 +787,23 @@ export default function App() {
     if (bw) showToast(`✓ Вес тела ${bw} кг сохранён`);
   };
 
+  const cloneWorkoutForEdit = (wo) => ({
+    ...wo,
+    bodyWeight: wo.bodyWeight || "",
+    libraryIncluded: countsForLibrary(wo),
+    exercises: (wo.exercises || []).map(ex => ({
+      ...ex,
+      comment: ex.comment || "",
+      sets: Array.isArray(ex.sets)
+        ? ex.sets.map(s => ({ weight: s.weight ?? "", reps: s.reps ?? "" }))
+        : [{ weight: ex.weight ?? "", reps: ex.reps ?? "" }],
+    })),
+  });
+
   // ── HISTORY ──────────────────────────────────────────────────────────────
+  const toggleWorkoutExpanded = id =>
+    setExpandedWorkouts(p => ({ ...p, [id]: !p[id] }));
+
   const openDetails = wo => {
     let t = `📋 ТРЕНИРОВКА ОТ ${fmtDate(wo.date)}\n`;
     if (wo.bodyWeight) t += `⚖ Вес тела: ${wo.bodyWeight} кг\n`;
@@ -755,9 +820,101 @@ export default function App() {
   };
 
   const delWo = id => confirm("Удалить тренировку?", () => {
-    saveWo(workouts.filter(w => w.id !== id));
-    showToast("Тренировка удалена");
+    const removed = workouts.find(w => w.id === id);
+    const next = workouts.filter(w => w.id !== id);
+    const affectedIds = [...new Set((removed?.exercises || []).map(e => e.id))];
+    (async () => {
+      const ok = countsForLibrary(removed)
+        ? await saveWorkoutsAndRecalc(next, affectedIds)
+        : await saveWo(next);
+      if (ok) {
+        setExpandedWorkouts(p => {
+          const copy = { ...p };
+          delete copy[id];
+          return copy;
+        });
+        showToast("Тренировка удалена");
+      }
+    })();
   });
+
+  const startEditWorkout = (wo) => setEditingWorkout(cloneWorkoutForEdit(wo));
+  const upEditWorkout = (k, v) => setEditingWorkout(p => ({ ...p, [k]: v }));
+  const upEditWorkoutSet = (exIdx, setIdx, field, value) =>
+    setEditingWorkout(p => ({
+      ...p,
+      exercises: p.exercises.map((ex, i) => {
+        if (i !== exIdx) return ex;
+        return {
+          ...ex,
+          sets: ex.sets.map((set, si) => si === setIdx ? { ...set, [field]: value } : set),
+        };
+      }),
+    }));
+  const upEditWorkoutComment = (exIdx, value) =>
+    setEditingWorkout(p => ({
+      ...p,
+      exercises: p.exercises.map((ex, i) => i === exIdx ? { ...ex, comment: value } : ex),
+    }));
+  const addEditWorkoutSet = (exIdx) =>
+    setEditingWorkout(p => ({
+      ...p,
+      exercises: p.exercises.map((ex, i) => {
+        if (i !== exIdx) return ex;
+        const last = ex.sets[ex.sets.length - 1] || { weight: "", reps: "" };
+        return { ...ex, sets: [...ex.sets, { ...last }] };
+      }),
+    }));
+  const removeEditWorkoutSet = (exIdx, setIdx) =>
+    setEditingWorkout(p => ({
+      ...p,
+      exercises: p.exercises.map((ex, i) => {
+        if (i !== exIdx || ex.sets.length <= 1) return ex;
+        return { ...ex, sets: ex.sets.filter((_, si) => si !== setIdx) };
+      }),
+    }));
+  const removeEditWorkoutExercise = (exIdx) => {
+    if (editingWorkout?.exercises.length <= 1) {
+      showToast("В тренировке должно остаться хотя бы одно упражнение");
+      return;
+    }
+    setEditingWorkout(p => {
+      return { ...p, exercises: p.exercises.filter((_, i) => i !== exIdx) };
+    });
+  };
+  const saveEditedWorkout = async () => {
+    if (!editingWorkout?.date) { showToast("Укажите дату тренировки"); return; }
+    const firstBad = editingWorkout.exercises.findIndex(ex => ex.sets.some(s => !String(s.reps || "").trim()));
+    if (firstBad !== -1) {
+      showToast(`Заполните повторения в упражнении ${firstBad + 1}`);
+      return;
+    }
+    const oldWorkout = workouts.find(w => w.id === editingWorkout.id);
+    const cleaned = {
+      ...editingWorkout,
+      bodyWeight: String(editingWorkout.bodyWeight || "").trim(),
+      exercises: editingWorkout.exercises.map(ex => ({
+        ...ex,
+        comment: String(ex.comment || "").trim(),
+        sets: ex.sets.map(s => ({
+          weight: String(s.weight ?? "").trim(),
+          reps: String(s.reps ?? "").trim(),
+        })),
+      })),
+    };
+    const next = workouts.map(w => w.id === cleaned.id ? cleaned : w);
+    const affectedIds = [...new Set([
+      ...(oldWorkout?.exercises || []).map(e => e.id),
+      ...cleaned.exercises.map(e => e.id),
+    ])];
+    const ok = countsForLibrary(cleaned)
+      ? await saveWorkoutsAndRecalc(next, affectedIds)
+      : await saveWo(next);
+    if (ok) {
+      setEditingWorkout(null);
+      showToast("✓ Тренировка обновлена");
+    }
+  };
 
   // ── LIBRARY ───────────────────────────────────────────────────────────────
   const handleAddGroup = () => {
@@ -831,6 +988,19 @@ export default function App() {
   // ── DRAG & DROP ───────────────────────────────────────────────────────────
   const [draggingId, setDraggingId] = useState(null);
   const [dragOver, setDragOver]     = useState(null);
+  const [draggingGroup, setDraggingGroup] = useState(null);
+  const [groupDragOver, setGroupDragOver] = useState(undefined);
+
+  const commitGroupMove = useCallback((groupName, beforeName) => {
+    if (groupName === beforeName) return;
+    const moved = exercises.find(g => g.name === groupName);
+    if (!moved) return;
+    const rest = exercises.filter(g => g.name !== groupName);
+    const next = [...rest];
+    const idx = beforeName === null ? next.length : next.findIndex(g => g.name === beforeName);
+    next.splice(idx === -1 ? next.length : idx, 0, moved);
+    saveEx(next);
+  }, [exercises, saveEx]);
 
   const commitMove = useCallback((exId, toGroup, afterId) => {
     let moved = null;
@@ -848,19 +1018,51 @@ export default function App() {
   }, [exercises, saveEx]);
 
   const onDragStart = (e, exId, fromGroup) => {
-    dragRef.current = { exId, fromGroup };
+    dragRef.current = { type: "exercise", exId, fromGroup };
     e.dataTransfer.effectAllowed = "move";
     e.dataTransfer.setData("text/plain", JSON.stringify({ exId, fromGroup }));
     setDraggingId(exId);
   };
-  const onDragOver = (e, groupName, afterId) => { e.preventDefault(); e.stopPropagation(); setDragOver({ groupName, afterId }); };
+  const onDragOver = (e, groupName, afterId) => {
+    if (dragRef.current?.type !== "exercise") return;
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver({ groupName, afterId });
+  };
   const onDrop = (e, toGroup, afterId) => {
     e.preventDefault(); e.stopPropagation();
-    const { exId } = dragRef.current || {};
+    const { type, exId } = dragRef.current || {};
     dragRef.current = null; setDraggingId(null); setDragOver(null);
-    if (exId) commitMove(exId, toGroup, afterId);
+    if (type === "exercise" && exId) commitMove(exId, toGroup, afterId);
   };
-  const onDragEnd = () => { dragRef.current = null; setDraggingId(null); setDragOver(null); };
+  const onGroupDragStart = (e, groupName) => {
+    dragRef.current = { type: "group", groupName };
+    e.dataTransfer.effectAllowed = "move";
+    e.dataTransfer.setData("text/plain", groupName);
+    setDraggingGroup(groupName);
+  };
+  const onGroupDragOver = (e, beforeName) => {
+    if (dragRef.current?.type !== "group") return;
+    e.preventDefault();
+    e.stopPropagation();
+    setGroupDragOver(beforeName);
+  };
+  const onGroupDrop = (e, beforeName) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const { type, groupName } = dragRef.current || {};
+    dragRef.current = null;
+    setDraggingGroup(null);
+    setGroupDragOver(undefined);
+    if (type === "group" && groupName) commitGroupMove(groupName, beforeName);
+  };
+  const onDragEnd = () => {
+    dragRef.current = null;
+    setDraggingId(null);
+    setDragOver(null);
+    setDraggingGroup(null);
+    setGroupDragOver(undefined);
+  };
 
   const onTouchStart = (e, exId) => {
     const touch = e.touches[0];
@@ -902,6 +1104,54 @@ export default function App() {
       const over = td.lastOver;
       touchDrag.current = null; setDraggingId(null); setDragOver(null);
       if (over) commitMove(td.exId, over.groupName, over.afterId);
+      document.removeEventListener("touchmove", move);
+      document.removeEventListener("touchend", end);
+    };
+    document.addEventListener("touchmove", move, { passive: false });
+    document.addEventListener("touchend", end);
+  };
+
+  const startTouchGroupDrag = (e, groupName) => {
+    const touch = e.touches[0];
+    const src = e.currentTarget.closest(".lib-group-row") || e.currentTarget;
+    const rect = src.getBoundingClientRect();
+    const ghost = src.cloneNode(true);
+    ghost.style.cssText = `position:fixed;left:${rect.left}px;top:${rect.top}px;width:${rect.width}px;
+      opacity:0.85;pointer-events:none;z-index:9999;border-radius:10px;box-shadow:0 8px 32px rgba(0,0,0,0.5);transform:scale(1.02);`;
+    document.body.appendChild(ghost);
+    touchDrag.current = { type: "group", groupName, ghost, offsetX: touch.clientX - rect.left, offsetY: touch.clientY - rect.top, lastOver: undefined };
+    setDraggingGroup(groupName);
+    e.preventDefault();
+
+    const move = (ev) => {
+      const td = touchDrag.current; if (!td || td.type !== "group") return;
+      ev.preventDefault();
+      const t = ev.touches[0];
+      td.ghost.style.left = (t.clientX - td.offsetX) + "px";
+      td.ghost.style.top = (t.clientY - td.offsetY) + "px";
+      td.ghost.style.display = "none";
+      const el = document.elementFromPoint(t.clientX, t.clientY);
+      td.ghost.style.display = "";
+      const zone = el?.closest("[data-group-dropzone]");
+      if (zone) {
+        const beforeName = zone.dataset.before === "null" ? null : zone.dataset.before;
+        if (td.lastOver !== beforeName) {
+          td.lastOver = beforeName;
+          setGroupDragOver(beforeName);
+        }
+      } else if (td.lastOver !== undefined) {
+        td.lastOver = undefined;
+        setGroupDragOver(undefined);
+      }
+    };
+    const end = () => {
+      const td = touchDrag.current; if (!td || td.type !== "group") return;
+      td.ghost.remove();
+      const beforeName = td.lastOver;
+      touchDrag.current = null;
+      setDraggingGroup(null);
+      setGroupDragOver(undefined);
+      if (beforeName !== undefined) commitGroupMove(td.groupName, beforeName);
       document.removeEventListener("touchmove", move);
       document.removeEventListener("touchend", end);
     };
@@ -1189,10 +1439,15 @@ export default function App() {
                   return Object.entries(byDate).map(([d, ws]) => (
                     <div key={d} style={{marginBottom:22}}>
                       <div className="g-dg">{d}</div>
-                      {ws.map(w => (
+                      {ws.map(w => {
+                        const expanded = !!expandedWorkouts[w.id];
+                        return (
                         <div key={w.id} className="g-card">
-                          <div className="g-card-h">
+                          <div className="g-hist-head">
                             <div>
+                              <div className="g-witem-date">
+                                {new Date(w.date).toLocaleDateString("ru-RU",{weekday:"short",day:"2-digit",month:"2-digit",year:"numeric"})}
+                              </div>
                               <div className="g-card-t">{w.exercises.length} УПРАЖНЕНИЙ</div>
                               {w.bodyWeight
                                 ? <span className="bw-tag" style={{marginTop:4,display:"inline-flex"}}>⚖ {w.bodyWeight} кг</span>
@@ -1201,16 +1456,16 @@ export default function App() {
                                     + вес тела
                                   </button>
                               }
+                              {!countsForLibrary(w) && <span className="g-pill g-pill-a" style={{marginTop:6,display:"inline-block"}}>не влияет на базу</span>}
                             </div>
-                            <div className="g-row">
+                            <div className="g-hist-actions">
+                              <Btn c="ghost" sm onClick={() => toggleWorkoutExpanded(w.id)}>{expanded ? "Свернуть" : "Развернуть"}</Btn>
                               <Btn c="ghost" sm onClick={() => openDetails(w)}>Детали</Btn>
-                              {w.bodyWeight &&
-                                <button className="ib edit" onClick={() => setBodyWeightModal({ woId: w.id, value: w.bodyWeight || "" })} title="Изменить вес тела">✏️</button>
-                              }
+                              <button className="ib edit" onClick={() => startEditWorkout(w)} title="Редактировать тренировку">✏️</button>
                               <button className="ib del" onClick={() => delWo(w.id)}>🗑</button>
                             </div>
                           </div>
-                          {w.exercises.map(e => (
+                          {expanded && w.exercises.map(e => (
                             <div key={e.id} className="g-hist-ex">
                               <div className="g-hist-name">{e.name}</div>
                               <div className="g-hist-meta">
@@ -1222,7 +1477,8 @@ export default function App() {
                             </div>
                           ))}
                         </div>
-                      ))}
+                      );
+                    })}
                     </div>
                   ));
                 })()
@@ -1274,16 +1530,104 @@ export default function App() {
           </div>
         )}
 
+        {/* EDIT WORKOUT MODAL */}
+        {editingWorkout && (
+          <div className="g-ov" style={{zIndex:1070}}>
+            <div className="g-modal" style={{maxWidth:680}}>
+              <div className="g-modal-head">
+                <div>
+                  <div className="g-modal-t">Редактировать тренировку</div>
+                  <div className="g-modal-sub" style={{marginBottom:0}}>
+                    {countsForLibrary(editingWorkout) ? "Изменения пересчитают базу упражнений" : "Эта тренировка не влияет на базу упражнений"}
+                  </div>
+                </div>
+                <button className="modal-x" onClick={() => setEditingWorkout(null)} title="Закрыть">×</button>
+              </div>
+
+              <div className="g-2col">
+                <div className="g-field">
+                  <label>Дата тренировки</label>
+                  <input type="date" value={editingWorkout.date} onChange={e => upEditWorkout("date", e.target.value)}/>
+                </div>
+                <div className="g-field">
+                  <label>Вес тела (кг)</label>
+                  <input type="number" step="0.1" inputMode="decimal" placeholder="—"
+                    value={editingWorkout.bodyWeight}
+                    onChange={e => upEditWorkout("bodyWeight", e.target.value)}/>
+                </div>
+              </div>
+
+              {editingWorkout.exercises.map((ex, exIdx) => (
+                <div key={`${ex.id}-${exIdx}`} className="hist-edit-ex">
+                  <div className="hist-edit-head">
+                    <div className="hist-edit-title">{exIdx + 1}. {ex.name}</div>
+                    <button className="ib del" onClick={() => removeEditWorkoutExercise(exIdx)} title="Удалить из этой тренировки">🗑</button>
+                  </div>
+                  <table className="sets-table">
+                    <thead>
+                      <tr>
+                        <th style={{width:28}}>#</th>
+                        <th>Вес (кг)</th>
+                        <th>Повторения *</th>
+                        <th style={{width:32}}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ex.sets.map((s, si) => (
+                        <tr key={si}>
+                          <td><span className="set-num">{si + 1}</span></td>
+                          <td>
+                            <input className="set-input" type="number" step="0.5" inputMode="decimal"
+                              value={s.weight}
+                              onChange={e => upEditWorkoutSet(exIdx, si, "weight", e.target.value)}/>
+                          </td>
+                          <td>
+                            <input className={`set-input${!String(s.reps || "").trim()?" err":""}`} type="text" inputMode="numeric"
+                              value={s.reps}
+                              onChange={e => upEditWorkoutSet(exIdx, si, "reps", e.target.value)}/>
+                          </td>
+                          <td>{ex.sets.length > 1 &&
+                            <button className="set-del" onClick={() => removeEditWorkoutSet(exIdx, si)}>✕</button>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <button className="add-set-btn" onClick={() => addEditWorkoutSet(exIdx)}>+ добавить подход</button>
+                  <div className="g-field" style={{marginBottom:0}}>
+                    <label>Комментарий</label>
+                    <textarea rows={2} value={ex.comment} onChange={e => upEditWorkoutComment(exIdx, e.target.value)}/>
+                  </div>
+                </div>
+              ))}
+
+              <div className="g-modal-acts">
+                <Btn c="ghost" sm onClick={() => setEditingWorkout(null)}>Отмена</Btn>
+                <Btn c="acid" sm onClick={saveEditedWorkout}>Сохранить</Btn>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* LIBRARY MODAL */}
         {libOpen && (
           <div className="g-ov" onMouseDown={() => { setLibOpen(false); setEditingEx(null); setEditingGrp(null); }}>
             <div className="g-modal" style={{maxWidth:620}} onMouseDown={e => e.stopPropagation()}>
-              <div className="g-modal-t">База упражнений</div>
+              <div className="g-modal-head">
+                <div className="g-modal-t">База упражнений</div>
+                <button className="modal-x" onClick={() => { setLibOpen(false); setEditingEx(null); setEditingGrp(null); }} title="Закрыть">×</button>
+              </div>
               <div className="g-modal-sub">{totalEx} упражнений · {exercises.length} групп · ⠿ перетащить</div>
 
               {exercises.map(group => (
                 <div key={group.slug} className="lib-section">
-                  <div className="lib-group-row">
+                  <div className={`group-drop-zone${groupDragOver===group.name?" active":""}`}
+                    data-group-dropzone="1" data-before={group.name}
+                    onDragOver={e => onGroupDragOver(e, group.name)}
+                    onDrop={e => onGroupDrop(e, group.name)}/>
+                  <div className={`lib-group-row${draggingGroup===group.name?" dragging":""}${groupDragOver===group.name?" drag-over":""}`}
+                    draggable onDragStart={e => onGroupDragStart(e, group.name)} onDragEnd={onDragEnd}>
+                    <span className="drag-handle" title="Перетащить группу" onTouchStart={e => startTouchGroupDrag(e, group.name)}>⠿</span>
                     <div className="lib-group-name">💪 {group.name}</div>
                     <div className="lib-actions">
                       <IB type="edit" onClick={() => startEditGroup(group)} title="Редактировать"/>
@@ -1378,6 +1722,10 @@ export default function App() {
                   ))}
                 </div>
               ))}
+              <div className={`group-drop-zone${groupDragOver===null && draggingGroup?" active":""}`}
+                data-group-dropzone="1" data-before="null"
+                onDragOver={e => onGroupDragOver(e, null)}
+                onDrop={e => onGroupDrop(e, null)}/>
 
               <div className="lib-divider"/>
 
