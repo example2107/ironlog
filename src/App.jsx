@@ -387,7 +387,13 @@ const fmtDate = (iso) => {
   return `${parts[2]}.${parts[1]}.${parts[0]}`;
 };
 
-const todayISO = () => new Date().toISOString().split("T")[0];
+const todayISO = () => {
+  const d = new Date();
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
 
 const getRecId = (group) => {
   if (!group.exercises.length) return null;
@@ -514,6 +520,8 @@ export default function App() {
   const dragRef    = useRef(null);
   const touchDrag  = useRef(null);
   const execCardRefs = useRef({});
+  const libModalRef = useRef(null);
+  const autoScrollRef = useRef(null);
 
   const upEx = (k, v) => setExForm(p => ({ ...p, [k]: v }));
 
@@ -521,6 +529,45 @@ export default function App() {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(msg);
     toastTimer.current = setTimeout(() => setToast(null), 2400);
+  };
+
+  const stopDragAutoScroll = () => {
+    if (autoScrollRef.current) {
+      cancelAnimationFrame(autoScrollRef.current);
+      autoScrollRef.current = null;
+    }
+  };
+
+  const updateDragAutoScroll = (clientY) => {
+    const el = libModalRef.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const edge = 80;
+    const maxSpeed = 18;
+    let speed = 0;
+    if (clientY < rect.top + edge) {
+      speed = -Math.ceil(((rect.top + edge - clientY) / edge) * maxSpeed);
+    } else if (clientY > rect.bottom - edge) {
+      speed = Math.ceil(((clientY - (rect.bottom - edge)) / edge) * maxSpeed);
+    }
+    stopDragAutoScroll();
+    if (!speed) return;
+    const step = () => {
+      el.scrollTop += speed;
+      autoScrollRef.current = requestAnimationFrame(step);
+    };
+    autoScrollRef.current = requestAnimationFrame(step);
+  };
+
+  const closeLibrary = () => {
+    stopDragAutoScroll();
+    setLibOpen(false);
+    setEditingEx(null);
+    setEditingGrp(null);
+    setDraggingId(null);
+    setDragOver(null);
+    setDraggingGroup(null);
+    setGroupDragOver(undefined);
   };
 
   const saveEx = useCallback(async (d) => {
@@ -774,9 +821,9 @@ export default function App() {
     setScreen("home");
     // Prompt for body weight
     setBodyWeightModal({ woId: wo.id, value: "" });
-    showToast(updateLibrary && !librarySaved
-      ? "Тренировка в истории, база не обновилась"
-      : updateLibrary ? "✓ Тренировка завершена!" : "✓ Тренировка сохранена только в историю");
+    if (updateLibrary && !librarySaved) {
+      showToast("Тренировка в истории, база не обновилась");
+    }
   };
 
   // ── BODY WEIGHT ───────────────────────────────────────────────────────────
@@ -823,7 +870,7 @@ export default function App() {
     return t;
   };
 
-  const exportWorkouts = () => {
+  const exportWorkouts = async () => {
     if (!workouts.length) {
       showToast("История пуста");
       return;
@@ -841,7 +888,13 @@ export default function App() {
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
-    showToast("✓ Экспорт скачан");
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard is unavailable");
+      await navigator.clipboard.writeText(text);
+      showToast("✓ Экспорт скачан и скопирован");
+    } catch {
+      showToast("Экспорт скачан, но буфер обмена недоступен");
+    }
   };
 
   const delWo = id => confirm("Удалить тренировку?", () => {
@@ -1070,6 +1123,7 @@ export default function App() {
     if (dragRef.current?.type !== "group") return;
     e.preventDefault();
     e.stopPropagation();
+    updateDragAutoScroll(e.clientY);
     setGroupDragOver(beforeName);
   };
   const onGroupDrop = (e, beforeName) => {
@@ -1079,6 +1133,7 @@ export default function App() {
     dragRef.current = null;
     setDraggingGroup(null);
     setGroupDragOver(undefined);
+    stopDragAutoScroll();
     if (type === "group" && groupName) commitGroupMove(groupName, beforeName);
   };
   const onDragEnd = () => {
@@ -1087,6 +1142,7 @@ export default function App() {
     setDragOver(null);
     setDraggingGroup(null);
     setGroupDragOver(undefined);
+    stopDragAutoScroll();
   };
 
   const onTouchStart = (e, exId) => {
@@ -1108,6 +1164,7 @@ export default function App() {
       const td = touchDrag.current; if (!td) return;
       ev.preventDefault();
       const t = ev.touches[0];
+      updateDragAutoScroll(t.clientY);
       td.ghost.style.left = (t.clientX - td.offsetX) + "px";
       td.ghost.style.top  = (t.clientY - td.offsetY) + "px";
       td.ghost.style.display = "none";
@@ -1176,6 +1233,7 @@ export default function App() {
       touchDrag.current = null;
       setDraggingGroup(null);
       setGroupDragOver(undefined);
+      stopDragAutoScroll();
       if (beforeName !== undefined) commitGroupMove(td.groupName, beforeName);
       document.removeEventListener("touchmove", move);
       document.removeEventListener("touchend", end);
@@ -1628,11 +1686,12 @@ export default function App() {
 
         {/* LIBRARY MODAL */}
         {libOpen && (
-          <div className="g-ov" onMouseDown={() => { setLibOpen(false); setEditingEx(null); setEditingGrp(null); }}>
-            <div className="g-modal" style={{maxWidth:620}} onMouseDown={e => e.stopPropagation()}>
+          <div className="g-ov" onMouseDown={closeLibrary}>
+            <div className="g-modal" ref={libModalRef} style={{maxWidth:620}} onMouseDown={e => e.stopPropagation()}
+              onDragOver={e => { if (dragRef.current?.type === "group") updateDragAutoScroll(e.clientY); }}>
               <div className="g-modal-head">
                 <div className="g-modal-t">База упражнений</div>
-                <button className="modal-x" onClick={() => { setLibOpen(false); setEditingEx(null); setEditingGrp(null); }} title="Закрыть">×</button>
+                <button className="modal-x" onClick={closeLibrary} title="Закрыть">×</button>
               </div>
               <div className="g-modal-sub">{totalEx} упражнений · {exercises.length} групп · ⠿ перетащить</div>
 
@@ -1797,7 +1856,7 @@ export default function App() {
               </div>
 
               <div className="g-modal-acts" style={{marginTop:16}}>
-                <Btn c="ghost" sm onClick={() => { setLibOpen(false); setEditingEx(null); setEditingGrp(null); }}>Закрыть</Btn>
+                <Btn c="ghost" sm onClick={closeLibrary}>Закрыть</Btn>
               </div>
             </div>
           </div>
