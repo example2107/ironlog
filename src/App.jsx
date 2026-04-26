@@ -185,9 +185,17 @@ body{background:#0a0a0f;}
 
 /* EXEC CARD */
 .g-ecard{background:var(--ink3);border:1px solid var(--line);border-radius:13px;padding:17px;margin-bottom:11px;}
-.g-ecard-t{font-weight:600;font-size:15px;color:var(--snow);margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line2);}
+.g-ecard-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--line2);}
+.g-ecard-t{font-weight:600;font-size:15px;color:var(--snow);padding-top:6px;line-height:1.35;}
+.g-ecard-actions{display:flex;gap:6px;flex-shrink:0;flex-wrap:wrap;justify-content:flex-end;}
 .g-hint{padding:9px 13px;margin-bottom:13px;background:var(--amber-dim);border-left:3px solid var(--amber);
   border-radius:0 8px 8px 0;font-size:12px;color:var(--amber);line-height:1.5;}
+.replace-list{display:grid;gap:8px;margin-bottom:16px;}
+.replace-item{width:100%;text-align:left;background:var(--ink3);border:1px solid var(--line);border-radius:10px;padding:12px 13px;
+  color:var(--snow);font-family:'DM Sans',sans-serif;cursor:pointer;transition:border-color 0.14s,background 0.14s;}
+.replace-item:hover{border-color:rgba(200,255,0,0.35);background:rgba(200,255,0,0.05);}
+.replace-name{font-size:14px;font-weight:600;margin-bottom:4px;}
+.replace-meta{font-size:11px;color:var(--steel);line-height:1.5;}
 
 /* SETS TABLE */
 .sets-table{width:100%;border-collapse:collapse;margin-bottom:10px;}
@@ -241,7 +249,7 @@ body{background:#0a0a0f;}
 /* CONFIRM DIALOG */
 .confirm-box{background:var(--ink2);border:1px solid var(--line2);border-radius:16px;padding:24px;max-width:360px;width:100%;}
 .confirm-msg{font-size:15px;color:var(--snow);margin-bottom:20px;line-height:1.5;}
-.confirm-acts{display:flex;gap:10px;justify-content:flex-end;}
+.confirm-acts{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;}
 
 /* TOAST */
 .toast{position:fixed;bottom:calc(24px + env(safe-area-inset-bottom));left:50%;transform:translateX(-50%);
@@ -306,6 +314,8 @@ body{background:#0a0a0f;}
   .g-ecard{padding:13px;}
   .g-modal-acts .g-btn{flex:1;justify-content:center;}
   .g-3col{grid-template-columns:1fr;}
+  .g-ecard-head{display:block;}
+  .g-ecard-actions{justify-content:flex-start;margin-top:10px;}
 }
 @media(max-width:360px){
   .g-2col{grid-template-columns:1fr;}
@@ -465,6 +475,9 @@ export default function App() {
   const [detailModal, setDetailModal] = useState(null);
   const [libOpen, setLibOpen]         = useState(false);
   const [bodyWeightModal, setBodyWeightModal] = useState(null); // { woId, value }
+  const [replaceModal, setReplaceModal] = useState(null); // { exId, groupName }
+  const [finishPrompt, setFinishPrompt] = useState(false);
+  const [finishBusy, setFinishBusy] = useState(false);
 
   // confirm dialog
   const [confirmDialog, setConfirmDialog] = useState(null);
@@ -486,34 +499,70 @@ export default function App() {
 
   const upEx = (k, v) => setExForm(p => ({ ...p, [k]: v }));
 
-  const saveEx = useCallback(async (d) => {
-    setExercises(d);
-    if (session) await supabase.from("exercises").upsert({ user_id: session.user.id, data: d });
-  }, [session]);
-
-  const saveWo = useCallback(async (newArr) => {
-    setWorkouts(newArr);
-    if (!session) { prevWorkoutsRef.current = newArr; return; }
-    const uid    = session.user.id;
-    const oldArr = prevWorkoutsRef.current;
-    prevWorkoutsRef.current = newArr;
-    const oldMap = new Map(oldArr.map(w => [w.id, w]));
-    const newMap = new Map(newArr.map(w => [w.id, w]));
-    const deletedIds = oldArr.filter(w => !newMap.has(w.id)).map(w => w.id);
-    if (deletedIds.length) await supabase.from("workouts").delete().in("id", deletedIds).eq("user_id", uid);
-    const inserted = newArr.filter(w => !oldMap.has(w.id));
-    if (inserted.length) await supabase.from("workouts").insert(inserted.map(w => ({ id: w.id, user_id: uid, data: w })));
-    const updated = newArr.filter(w => oldMap.has(w.id) && JSON.stringify(oldMap.get(w.id)) !== JSON.stringify(w));
-    for (const w of updated) await supabase.from("workouts").update({ data: w }).eq("id", w.id).eq("user_id", uid);
-  }, [session]);
-
   const showToast = (msg) => {
     if (toastTimer.current) clearTimeout(toastTimer.current);
     setToast(msg);
     toastTimer.current = setTimeout(() => setToast(null), 2400);
   };
 
-  const confirm = (msg, onOk) => setConfirmDialog({ msg, onOk });
+  const saveEx = useCallback(async (d) => {
+    const prev = exercises;
+    setExercises(d);
+    if (!session) return true;
+    const { error } = await supabase.from("exercises").upsert({ user_id: session.user.id, data: d });
+    if (error) {
+      console.error("Failed to save exercises", error);
+      setExercises(prev);
+      showToast("Не удалось сохранить базу упражнений");
+      return false;
+    }
+    return true;
+  }, [exercises, session]);
+
+  const saveWo = useCallback(async (newArr) => {
+    const prevArr = workouts;
+    const prevRef = prevWorkoutsRef.current;
+    setWorkouts(newArr);
+    if (!session) { prevWorkoutsRef.current = newArr; return true; }
+    const uid    = session.user.id;
+    const oldArr = prevWorkoutsRef.current;
+    prevWorkoutsRef.current = newArr;
+    try {
+      const oldMap = new Map(oldArr.map(w => [w.id, w]));
+      const newMap = new Map(newArr.map(w => [w.id, w]));
+      const deletedIds = oldArr.filter(w => !newMap.has(w.id)).map(w => w.id);
+      if (deletedIds.length) {
+        const { error } = await supabase.from("workouts").delete().in("id", deletedIds).eq("user_id", uid);
+        if (error) throw error;
+      }
+      const inserted = newArr.filter(w => !oldMap.has(w.id));
+      if (inserted.length) {
+        const { error } = await supabase.from("workouts").insert(inserted.map(w => ({ id: w.id, user_id: uid, data: w })));
+        if (error) throw error;
+      }
+      const updated = newArr.filter(w => oldMap.has(w.id) && JSON.stringify(oldMap.get(w.id)) !== JSON.stringify(w));
+      for (const w of updated) {
+        const { error } = await supabase.from("workouts").update({ data: w }).eq("id", w.id).eq("user_id", uid);
+        if (error) throw error;
+      }
+      return true;
+    } catch (error) {
+      console.error("Failed to save workouts", error);
+      setWorkouts(prevArr);
+      prevWorkoutsRef.current = prevRef;
+      showToast("Не удалось сохранить тренировку");
+      return false;
+    }
+  }, [session, workouts]);
+
+  const confirm = (msg, onOk, opts = {}) => setConfirmDialog({
+    msg,
+    onOk,
+    okText: opts.okText || "Удалить",
+    cancelText: opts.cancelText || "Отмена",
+    okClass: opts.okClass || "red",
+    onCancel: opts.onCancel,
+  });
 
   const totalEx    = exercises.reduce((s, g) => s + g.exercises.length, 0);
   const lastWo     = workouts.length ? workouts[workouts.length - 1] : null;
@@ -523,6 +572,9 @@ export default function App() {
     for (const g of exercises) { const e = g.exercises.find(x => x.id === id); if (e) return e; }
     return null;
   };
+
+  const findGroupByExercise = id =>
+    exercises.find(g => g.exercises.some(e => e.id === id));
 
   // ── WORKOUT ──────────────────────────────────────────────────────────────
   const startCreate = () => {
@@ -543,33 +595,75 @@ export default function App() {
     }
   };
 
-  const updSet = (exIdx, setIdx, field, val) =>
+  const updateCurExercise = (exId, updater) =>
     setCur(p => {
-      const exs  = [...p.exercises];
-      const sets = [...exs[exIdx].sets];
-      sets[setIdx] = { ...sets[setIdx], [field]: val };
-      exs[exIdx]   = { ...exs[exIdx], sets };
-      return { ...p, exercises: exs };
-    });
-
-  const updComment = (exIdx, val) =>
-    setCur(p => { const exs = [...p.exercises]; exs[exIdx] = { ...exs[exIdx], comment: val }; return { ...p, exercises: exs }; });
-
-  const addSet = (exIdx) =>
-    setCur(p => {
-      const exs  = [...p.exercises];
-      const last = exs[exIdx].sets[exs[exIdx].sets.length - 1] || { weight: "", reps: "" };
-      exs[exIdx] = { ...exs[exIdx], sets: [...exs[exIdx].sets, { ...last }] };
-      return { ...p, exercises: exs };
-    });
-
-  const removeSet = (exIdx, setIdx) =>
-    setCur(p => {
+      if (!p) return p;
       const exs = [...p.exercises];
-      if (exs[exIdx].sets.length <= 1) return p;
-      exs[exIdx] = { ...exs[exIdx], sets: exs[exIdx].sets.filter((_, i) => i !== setIdx) };
+      const exIdx = exs.findIndex(e => e.id === exId);
+      if (exIdx === -1) return p;
+      exs[exIdx] = updater(exs[exIdx]);
       return { ...p, exercises: exs };
     });
+
+  const updSet = (exId, setIdx, field, val) =>
+    updateCurExercise(exId, ex => {
+      const sets = [...ex.sets];
+      if (!sets[setIdx]) return ex;
+      sets[setIdx] = { ...sets[setIdx], [field]: val };
+      return { ...ex, sets };
+    });
+
+  const updComment = (exId, val) =>
+    updateCurExercise(exId, ex => ({ ...ex, comment: val }));
+
+  const addSet = (exId) =>
+    updateCurExercise(exId, ex => {
+      const last = ex.sets[ex.sets.length - 1] || { weight: "", reps: "" };
+      return { ...ex, sets: [...ex.sets, { ...last }] };
+    });
+
+  const removeSet = (exId, setIdx) =>
+    updateCurExercise(exId, ex => {
+      if (ex.sets.length <= 1) return ex;
+      return { ...ex, sets: ex.sets.filter((_, i) => i !== setIdx) };
+    });
+
+  const removeCurrentExercise = (exId) => confirm("Удалить упражнение из текущей тренировки?", () => {
+    setCur(p => {
+      if (!p) return p;
+      return { ...p, exercises: p.exercises.filter(e => e.id !== exId) };
+    });
+  }, { okText: "Удалить", okClass: "red" });
+
+  const openReplace = (ex) => {
+    const group = exercises.find(g => g.name === ex.group) || findGroupByExercise(ex.id);
+    if (!group) { showToast("Группа упражнения не найдена"); return; }
+    const selectedIds = new Set(cur?.exercises.map(e => e.id) || []);
+    const options = group.exercises.filter(item => item.id !== ex.id && !selectedIds.has(item.id));
+    if (!options.length) {
+      showToast("В этой группе нет доступной замены");
+      return;
+    }
+    setReplaceModal({ exId: ex.id, groupName: group.name });
+  };
+
+  const replaceCurrentExercise = (oldId, newId) => {
+    const group = exercises.find(g => g.exercises.some(e => e.id === newId));
+    const next = group?.exercises.find(e => e.id === newId);
+    if (!group || !next) { showToast("Упражнение не найдено"); return; }
+    setCur(p => {
+      if (!p) return p;
+      return { ...p, exercises: p.exercises.map(ex => ex.id === oldId ? {
+        id: next.id,
+        name: next.name,
+        group: group.name,
+        sets: buildSets(next.last_weight, next.last_reps),
+        comment: next.comment || "",
+      } : ex) };
+    });
+    setReplaceModal(null);
+    showToast("Упражнение заменено");
+  };
 
   const doStart = () => {
     if (!cur?.exercises.length) { showToast("Выберите хотя бы одно упражнение"); return; }
@@ -579,9 +673,13 @@ export default function App() {
 
   const abort = () => confirm("Отменить тренировку? Данные будут потеряны.", () => {
     setCur(null); setScreen("home");
-  });
+  }, { okText: "Отменить", okClass: "red" });
 
   const finish = () => {
+    if (!cur?.exercises.length) {
+      showToast("В тренировке нет упражнений");
+      return;
+    }
     let firstBad = -1;
     for (let i = 0; i < cur.exercises.length; i++) {
       if (cur.exercises[i].sets.some(s => !s.reps)) { firstBad = i; break; }
@@ -591,22 +689,45 @@ export default function App() {
       showToast(`Заполните повторения в упражнении ${firstBad + 1}`);
       return;
     }
-    const updEx = exercises.map(g => ({
-      ...g, exercises: g.exercises.map(ex => {
-        const done = cur.exercises.find(e => e.id === ex.id);
-        if (!done) return ex;
-        const { weight, reps } = setsToSummary(done.sets);
-        return { ...ex, last_weight: weight, last_reps: reps, last_date: cur.date, comment: done.comment || ex.comment };
-      }),
-    }));
-    saveEx(updEx);
+    setFinishPrompt(true);
+  };
+
+  const completeWorkout = async (updateLibrary) => {
+    if (!cur || finishBusy) return;
+    setFinishBusy(true);
     const wo = { ...cur, completed: true };
-    saveWo([...workouts, wo]);
+    const savedWorkout = await saveWo([...workouts, wo]);
+    if (!savedWorkout) {
+      setFinishBusy(false);
+      return;
+    }
+    let librarySaved = true;
+    if (updateLibrary) {
+      const updEx = exercises.map(g => ({
+        ...g, exercises: g.exercises.map(ex => {
+          const done = cur.exercises.find(e => e.id === ex.id);
+          if (!done) return ex;
+          const { weight, reps } = setsToSummary(done.sets);
+          return {
+            ...ex,
+            last_weight: weight,
+            last_reps: reps,
+            last_date: cur.date,
+            comment: String(done.comment || "").trim() || null,
+          };
+        }),
+      }));
+      librarySaved = await saveEx(updEx);
+    }
+    setFinishPrompt(false);
+    setFinishBusy(false);
     setCur(null);
     setScreen("home");
     // Prompt for body weight
     setBodyWeightModal({ woId: wo.id, value: "" });
-    showToast("✓ Тренировка завершена!");
+    showToast(updateLibrary && !librarySaved
+      ? "Тренировка в истории, база не обновилась"
+      : updateLibrary ? "✓ Тренировка завершена!" : "✓ Тренировка сохранена только в историю");
   };
 
   // ── BODY WEIGHT ───────────────────────────────────────────────────────────
@@ -999,7 +1120,13 @@ export default function App() {
               const orig = findEx(ex.id);
               return (
                 <div key={ex.id} className="g-ecard" ref={el => execCardRefs.current[idx] = el}>
-                  <div className="g-ecard-t">{idx+1}. {ex.name}</div>
+                  <div className="g-ecard-head">
+                    <div className="g-ecard-t">{idx+1}. {ex.name}</div>
+                    <div className="g-ecard-actions">
+                      <Btn c="ghost" sm onClick={() => openReplace(ex)}>Заменить</Btn>
+                      <button className="ib del" onClick={() => removeCurrentExercise(ex.id)} title="Удалить из текущей тренировки">🗑</button>
+                    </div>
+                  </div>
                   {orig?.last_date && (
                     <div className="g-hint">
                       Прошлый раз {fmtDate(orig.last_date)}: {orig.last_weight != null && orig.last_weight !== "" ? orig.last_weight+" кг" : "б/в"}{orig.last_reps ? " · "+orig.last_reps : ""}
@@ -1021,21 +1148,21 @@ export default function App() {
                           <td><span className="set-num">{si+1}</span></td>
                           <td><input className="set-input" type="number" placeholder="кг" step="0.5"
                             inputMode="decimal" value={s.weight}
-                            onChange={e => updSet(idx, si, "weight", e.target.value)}/></td>
+                            onChange={e => updSet(ex.id, si, "weight", e.target.value)}/></td>
                           <td><input className={`set-input${!s.reps?" err":""}`} type="text" placeholder="повт."
                             inputMode="numeric" value={s.reps}
-                            onChange={e => updSet(idx, si, "reps", e.target.value)}/></td>
+                            onChange={e => updSet(ex.id, si, "reps", e.target.value)}/></td>
                           <td>{ex.sets.length > 1 &&
-                            <button className="set-del" onClick={() => removeSet(idx, si)}>✕</button>}
+                            <button className="set-del" onClick={() => removeSet(ex.id, si)}>✕</button>}
                           </td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
-                  <button className="add-set-btn" onClick={() => addSet(idx)}>+ добавить подход</button>
+                  <button className="add-set-btn" onClick={() => addSet(ex.id)}>+ добавить подход</button>
                   <div className="g-field" style={{marginBottom:0}}>
                     <label>Комментарий</label>
-                    <textarea rows={2} placeholder="Заметка..." value={ex.comment} onChange={e => updComment(idx, e.target.value)}/>
+                    <textarea rows={2} placeholder="Заметка..." value={ex.comment} onChange={e => updComment(ex.id, e.target.value)}/>
                   </div>
                 </div>
               );
@@ -1311,14 +1438,67 @@ export default function App() {
           </div>
         )}
 
+        {/* REPLACE EXERCISE MODAL */}
+        {replaceModal && (() => {
+          const group = exercises.find(g => g.name === replaceModal.groupName);
+          const selectedIds = new Set(cur?.exercises.map(e => e.id) || []);
+          const options = (group?.exercises || []).filter(ex => ex.id !== replaceModal.exId && !selectedIds.has(ex.id));
+          return (
+            <div className="g-ov" style={{zIndex:1080}} onMouseDown={() => setReplaceModal(null)}>
+              <div className="g-modal" style={{maxWidth:440}} onMouseDown={e => e.stopPropagation()}>
+                <div className="g-modal-t">Заменить упражнение</div>
+                <div className="g-modal-sub">{replaceModal.groupName}</div>
+                <div className="replace-list">
+                  {options.map(ex => (
+                    <button key={ex.id} type="button" className="replace-item"
+                      onClick={() => replaceCurrentExercise(replaceModal.exId, ex.id)}>
+                      <div className="replace-name">{ex.name}</div>
+                      <div className="replace-meta">
+                        {ex.last_date ? `Прошлый раз ${fmtDate(ex.last_date)}` : "Ещё не выполнялось"}
+                        {ex.last_weight != null && ex.last_weight !== "" ? ` · ${ex.last_weight} кг` : ""}
+                        {ex.last_reps ? ` · ${ex.last_reps}` : ""}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+                <div className="g-modal-acts">
+                  <Btn c="ghost" sm onClick={() => setReplaceModal(null)}>Отмена</Btn>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* FINISH PROMPT */}
+        {finishPrompt && (
+          <div className="g-ov" style={{zIndex:1090}}>
+            <div className="confirm-box" style={{maxWidth:420}}>
+              <div className="confirm-msg">
+                Учитывать данные этой тренировки в базе упражнений?
+              </div>
+              <div style={{fontSize:12,color:"var(--steel)",lineHeight:1.5,marginBottom:18}}>
+                Если выбрать “нет”, тренировка сохранится в истории, но последние веса, повторы, дата и комментарии в базе упражнений не изменятся.
+              </div>
+              <div className="confirm-acts">
+                <Btn c="ghost" sm onClick={() => completeWorkout(false)}>{finishBusy ? "…" : "Нет, только история"}</Btn>
+                <Btn c="green" sm onClick={() => completeWorkout(true)}>{finishBusy ? "…" : "Да, обновить базу"}</Btn>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* CONFIRM DIALOG */}
         {confirmDialog && (
           <div className="g-ov" style={{zIndex:1100}}>
             <div className="confirm-box">
               <div className="confirm-msg">{confirmDialog.msg}</div>
               <div className="confirm-acts">
-                <Btn c="ghost" sm onClick={() => setConfirmDialog(null)}>Отмена</Btn>
-                <Btn c="red" sm onClick={() => { confirmDialog.onOk(); setConfirmDialog(null); }}>Удалить</Btn>
+                <Btn c="ghost" sm onClick={() => { confirmDialog.onCancel?.(); setConfirmDialog(null); }}>
+                  {confirmDialog.cancelText}
+                </Btn>
+                <Btn c={confirmDialog.okClass} sm onClick={() => { confirmDialog.onOk(); setConfirmDialog(null); }}>
+                  {confirmDialog.okText}
+                </Btn>
               </div>
             </div>
           </div>
