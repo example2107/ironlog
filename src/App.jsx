@@ -456,8 +456,11 @@ export default function App() {
   const [exercises, setExercises] = useState([]);
   const [workouts,  setWorkouts]  = useState([]);
   const prevWorkoutsRef           = useRef([]);
+  const workoutsRef               = useRef([]);
+  const loadSeqRef                = useRef(0);
   const [cur, setCur]             = useState(null);
   const [date, setDate]           = useState(todayISO);
+  const userId                    = session?.user?.id || null;
 
   // Update date on tab focus (user may have left app open overnight)
   useEffect(() => {
@@ -466,20 +469,28 @@ export default function App() {
     return () => window.removeEventListener("focus", onFocus);
   }, []);
 
+  useEffect(() => {
+    workoutsRef.current = workouts;
+  }, [workouts]);
+
   // ── LOAD DATA FROM SUPABASE ───────────────────────────────────────────────
   useEffect(() => {
-    if (!session) {
-      setExercises([]); setWorkouts([]); prevWorkoutsRef.current = [];
+    if (!userId) {
+      loadSeqRef.current++;
+      setExercises([]); setWorkouts([]); prevWorkoutsRef.current = []; workoutsRef.current = [];
       return;
     }
-    const uid = session.user.id;
+    const loadSeq = ++loadSeqRef.current;
+    const uid = userId;
     (async () => {
       const { data, error } = await supabase.from("exercises").select("data").eq("user_id", uid).single();
+      if (loadSeq !== loadSeqRef.current) return;
       if (error && error.code === "PGRST116") {
         // First login — migrate from localStorage or use defaults
         const localEx = ls.get("wtp_ex", null);
         const toSave  = (localEx && localEx.length) ? localEx : DEFAULT_EXERCISES;
         await supabase.from("exercises").insert({ user_id: uid, data: toSave });
+        if (loadSeq !== loadSeqRef.current) return;
         setExercises(toSave);
       } else if (data) {
         setExercises(data.data);
@@ -487,11 +498,12 @@ export default function App() {
     })();
     (async () => {
       const { data } = await supabase.from("workouts").select("id, data").eq("user_id", uid).order("id");
+      if (loadSeq !== loadSeqRef.current) return;
       const arr = (data || []).map(r => r.data);
       setWorkouts(arr);
       prevWorkoutsRef.current = arr;
     })();
-  }, [session]);
+  }, [userId]);
 
   // modals
   const [detailModal, setDetailModal] = useState(null);
@@ -590,6 +602,7 @@ export default function App() {
   };
 
   const saveEx = useCallback(async (d) => {
+    loadSeqRef.current++;
     const prev = exercises;
     setExercises(d);
     if (!session) return true;
@@ -604,11 +617,13 @@ export default function App() {
   }, [exercises, session]);
 
   const saveWo = useCallback(async (newArr) => {
-    const prevArr = workouts;
+    loadSeqRef.current++;
+    const prevArr = workoutsRef.current;
     const prevRef = prevWorkoutsRef.current;
+    workoutsRef.current = newArr;
     setWorkouts(newArr);
-    if (!session) { prevWorkoutsRef.current = newArr; return true; }
-    const uid    = session.user.id;
+    if (!userId) { prevWorkoutsRef.current = newArr; return true; }
+    const uid    = userId;
     const oldArr = prevWorkoutsRef.current;
     prevWorkoutsRef.current = newArr;
     try {
@@ -632,12 +647,13 @@ export default function App() {
       return true;
     } catch (error) {
       console.error("Failed to save workouts", error);
+      workoutsRef.current = prevArr;
       setWorkouts(prevArr);
       prevWorkoutsRef.current = prevRef;
       showToast("Не удалось сохранить тренировку");
       return false;
     }
-  }, [session, workouts]);
+  }, [userId]);
 
   const confirm = (msg, onOk, opts = {}) => setConfirmDialog({
     msg,
@@ -823,7 +839,9 @@ export default function App() {
     if (!cur || finishBusy) return;
     setFinishBusy(true);
     const wo = { ...cur, completed: true, libraryIncluded: updateLibrary };
-    const savedWorkout = await saveWo([...workouts, wo]);
+    const baseWorkouts = workoutsRef.current;
+    const nextWorkouts = [...baseWorkouts, wo];
+    const savedWorkout = await saveWo(nextWorkouts);
     if (!savedWorkout) {
       setFinishBusy(false);
       return;
@@ -831,7 +849,7 @@ export default function App() {
     let librarySaved = true;
     if (updateLibrary) {
       const affectedIds = cur.exercises.map(e => e.id);
-      const updEx = recalcExerciseLibrary([...workouts, wo], exercises, affectedIds);
+      const updEx = recalcExerciseLibrary(nextWorkouts, exercises, affectedIds);
       librarySaved = await saveEx(updEx);
     }
     setFinishPrompt(false);
@@ -848,7 +866,7 @@ export default function App() {
   // ── BODY WEIGHT ───────────────────────────────────────────────────────────
   const saveBodyWeight = (woId, value) => {
     const bw = value.trim();
-    saveWo(workouts.map(w => w.id === woId ? { ...w, bodyWeight: bw } : w));
+    saveWo(workoutsRef.current.map(w => w.id === woId ? { ...w, bodyWeight: bw } : w));
     setBodyWeightModal(null);
     if (bw) showToast(`✓ Вес тела ${bw} кг сохранён`);
   };
@@ -890,11 +908,12 @@ export default function App() {
   };
 
   const exportWorkouts = async () => {
-    if (!workouts.length) {
+    const source = workoutsRef.current;
+    if (!source.length) {
       showToast("История пуста");
       return;
     }
-    const text = [...workouts]
+    const text = [...source]
       .sort((a, b) => new Date(a.date) - new Date(b.date) || a.id - b.id)
       .map(formatWorkoutDetails)
       .join("\n\n");
@@ -917,8 +936,9 @@ export default function App() {
   };
 
   const delWo = id => confirm("Удалить тренировку?", () => {
-    const removed = workouts.find(w => w.id === id);
-    const next = workouts.filter(w => w.id !== id);
+    const source = workoutsRef.current;
+    const removed = source.find(w => w.id === id);
+    const next = source.filter(w => w.id !== id);
     const affectedIds = [...new Set((removed?.exercises || []).map(e => e.id))];
     (async () => {
       const ok = countsForLibrary(removed)
@@ -986,7 +1006,8 @@ export default function App() {
       showToast(`Заполните повторения в упражнении ${firstBad + 1}`);
       return;
     }
-    const oldWorkout = workouts.find(w => w.id === editingWorkout.id);
+    const source = workoutsRef.current;
+    const oldWorkout = source.find(w => w.id === editingWorkout.id);
     const cleaned = {
       ...editingWorkout,
       bodyWeight: String(editingWorkout.bodyWeight || "").trim(),
@@ -999,7 +1020,7 @@ export default function App() {
         })),
       })),
     };
-    const next = workouts.map(w => w.id === cleaned.id ? cleaned : w);
+    const next = source.map(w => w.id === cleaned.id ? cleaned : w);
     const affectedIds = [...new Set([
       ...(oldWorkout?.exercises || []).map(e => e.id),
       ...cleaned.exercises.map(e => e.id),
