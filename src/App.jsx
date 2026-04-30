@@ -141,7 +141,7 @@ body{background:#0a0a0f;}
 /* CARDS */
 .g-card{background:var(--ink2);border:1px solid var(--line);border-radius:16px;padding:20px;margin-bottom:12px;}
 .g-card-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line);}
-.g-card-t{font-family:'DM Sans',sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.2px;color:var(--acid);}
+.g-card-t{font-family:'DM Sans',sans-serif;font-weight:800;font-size:18px;letter-spacing:-0.2px;color:var(--acid);white-space:nowrap;}
 
 /* EXERCISE LIST */
 .g-group{background:var(--ink2);border:1px solid var(--line);border-radius:14px;margin-bottom:10px;overflow:hidden;}
@@ -241,8 +241,8 @@ body{background:#0a0a0f;}
 .g-witem-date{font-size:12px;color:var(--steel);margin-bottom:3px;}
 .g-witem-n{font-family:'DM Sans',sans-serif;font-weight:800;font-size:18px;color:var(--acid);letter-spacing:-0.2px;}
 .g-witem-list{font-size:12px;color:var(--snow2);margin-top:4px;line-height:1.5;}
-.g-hist-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:10px;}
-.g-hist-actions{display:flex;gap:7px;align-items:center;flex-wrap:wrap;justify-content:flex-end;}
+.g-hist-head{margin-bottom:10px;}
+.g-hist-actions{display:flex;gap:7px;align-items:center;justify-content:flex-end;margin-top:14px;}
 .g-hist-ex{padding:11px 13px;background:var(--ink3);border-radius:9px;margin-bottom:7px;border-left:3px solid var(--acid);}
 .g-hist-name{font-size:14px;font-weight:500;color:var(--snow);margin-bottom:3px;}
 .g-hist-meta{font-size:12px;color:var(--steel);}
@@ -535,7 +535,6 @@ export default function App() {
   const [finishPrompt, setFinishPrompt] = useState(false);
   const [finishBusy, setFinishBusy] = useState(false);
   const [editingWorkout, setEditingWorkout] = useState(null);
-  const [expandedWorkouts, setExpandedWorkouts] = useState({});
 
   // confirm dialog
   const [confirmDialog, setConfirmDialog] = useState(null);
@@ -950,9 +949,6 @@ export default function App() {
   });
 
   // ── HISTORY ──────────────────────────────────────────────────────────────
-  const toggleWorkoutExpanded = id =>
-    setExpandedWorkouts(p => ({ ...p, [id]: !p[id] }));
-
   const openDetails = wo => {
     setDetailModal(formatWorkoutDetails(wo));
   };
@@ -1000,14 +996,7 @@ export default function App() {
       const ok = countsForLibrary(removed)
         ? await saveWorkoutsAndRecalc(next, affectedIds)
         : await saveWo(next);
-      if (ok) {
-        setExpandedWorkouts(p => {
-          const copy = { ...p };
-          delete copy[id];
-          return copy;
-        });
-        showToast("Тренировка удалена");
-      }
+      if (ok) showToast("Тренировка удалена");
     })();
   });
 
@@ -1537,7 +1526,7 @@ export default function App() {
               <div className="g-sh" style={{marginBottom:0}}>В процессе</div>
               <span className="g-pill g-pill-a">⏱ {cur.exercises.length} упр.</span>
             </div>
-            <div className="insert-row"><button className="insert-btn" onClick={() => openInsertExercise("current", 0)}>+ в начало</button></div>
+            <div className="insert-row"><button className="insert-btn" onClick={() => openInsertExercise("current", 0)}>добавить упражнение</button></div>
             {cur.exercises.map((ex, idx) => {
               const orig = findEx(ex.id);
               const isDone = !!ex.done;
@@ -1595,13 +1584,11 @@ export default function App() {
                     <textarea rows={2} placeholder="Заметка..." value={ex.comment} disabled={isDone} onChange={e => updComment(ex.id, e.target.value)}/>
                   </div>
                   <div className="insert-row">
-                    <button className="insert-btn" onClick={() => openInsertExercise("current", idx)}>+ перед</button>
-                    <button className="insert-btn" onClick={() => openInsertExercise("current", idx + 1)}>+ после</button>
+                    <button className="insert-btn" onClick={() => openInsertExercise("current", idx + 1)}>добавить упражнение</button>
                   </div>
                 </div>
               );
             })}
-            <div className="insert-row"><button className="insert-btn" onClick={() => openInsertExercise("current", cur.exercises.length)}>+ в конец</button></div>
             <div className="g-row" style={{marginTop:10}}>
               <Btn c="ghost" onClick={abort}>Отменить</Btn>
               <Btn c="green" onClick={finish} style={{flex:1}}>✓ ЗАВЕРШИТЬ</Btn>
@@ -1619,7 +1606,6 @@ export default function App() {
               ? <div className="g-empty"><span className="g-empty-i">📭</span>История пуста</div>
               : <div>
                       {[...workouts].reverse().map(w => {
-                        const expanded = !!expandedWorkouts[w.id];
                         return (
                         <div key={w.id} className="g-card">
                           <div className="g-hist-head">
@@ -1638,23 +1624,11 @@ export default function App() {
                               {!countsForLibrary(w) && <span className="g-pill g-pill-a" style={{marginTop:6,display:"inline-block"}}>не влияет на базу</span>}
                             </div>
                             <div className="g-hist-actions">
-                              <Btn c="ghost" sm onClick={() => toggleWorkoutExpanded(w.id)}>{expanded ? "Свернуть" : "Развернуть"}</Btn>
-                              <Btn c="ghost" sm onClick={() => openDetails(w)}>Детали</Btn>
+                              <button className="ib edit" onClick={() => openDetails(w)} title="Детали тренировки">📋</button>
                               <button className="ib edit" onClick={() => startEditWorkout(w)} title="Редактировать тренировку">✏️</button>
                               <button className="ib del" onClick={() => delWo(w.id)}>🗑</button>
                             </div>
                           </div>
-                          {expanded && w.exercises.map(e => (
-                            <div key={e.id} className="g-hist-ex">
-                              <div className="g-hist-name">{e.name}</div>
-                              <div className="g-hist-meta">
-                                {e.sets && Array.isArray(e.sets)
-                                  ? e.sets.map((s,i) => `П${i+1}: ${s.weight||"б/в"}кг×${s.reps}`).join("  ·  ")
-                                  : `${e.weight||"б/в"} кг · ${e.sets}×${e.reps}`}
-                              </div>
-                              {e.comment && <div className="g-hist-note">💬 {e.comment}</div>}
-                            </div>
-                          ))}
                         </div>
                       );
                     })}
@@ -1734,7 +1708,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="insert-row"><button className="insert-btn" onClick={() => openInsertExercise("history", 0)}>+ в начало</button></div>
+              <div className="insert-row"><button className="insert-btn" onClick={() => openInsertExercise("history", 0)}>добавить упражнение</button></div>
               {editingWorkout.exercises.map((ex, exIdx) => (
                 <div key={`${ex.id}-${exIdx}`} className="hist-edit-ex">
                   <div className="hist-edit-head">
@@ -1781,12 +1755,10 @@ export default function App() {
                     <textarea rows={2} value={ex.comment} onChange={e => upEditWorkoutComment(exIdx, e.target.value)}/>
                   </div>
                   <div className="insert-row">
-                    <button className="insert-btn" onClick={() => openInsertExercise("history", exIdx)}>+ перед</button>
-                    <button className="insert-btn" onClick={() => openInsertExercise("history", exIdx + 1)}>+ после</button>
+                    <button className="insert-btn" onClick={() => openInsertExercise("history", exIdx + 1)}>добавить упражнение</button>
                   </div>
                 </div>
               ))}
-              <div className="insert-row"><button className="insert-btn" onClick={() => openInsertExercise("history", editingWorkout.exercises.length)}>+ в конец</button></div>
 
               <div className="g-modal-acts">
                 <Btn c="ghost" sm onClick={() => setEditingWorkout(null)}>Отмена</Btn>
