@@ -388,6 +388,39 @@ body{background:#0a0a0f;}
 const ls = {
   get: (k, d) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; } catch { return d; } },
   set: (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  remove: (k) => { try { localStorage.removeItem(k); } catch {} },
+};
+
+const ACTIVE_WORKOUT_KEY = "ironlog_active_workout_v1";
+const SUPABASE_TIMEOUT_MS = 12000;
+const SESSION_TIMEOUT_MS = 8000;
+
+const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+const withTimeout = (promise, label, ms = SUPABASE_TIMEOUT_MS) => {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label}: timeout`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+};
+
+const retrySupabase = async (makeRequest, label) => {
+  let lastError;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      return await withTimeout(makeRequest(), label);
+    } catch (error) {
+      lastError = error;
+      if (attempt === 0) {
+        await wait(500);
+        try {
+          await withTimeout(supabase.auth.refreshSession(), "обновление сессии", SESSION_TIMEOUT_MS);
+        } catch {}
+      }
+    }
+  }
+  throw lastError;
 };
 
 const fmtDate = (iso) => {
@@ -464,24 +497,53 @@ export default function App() {
   const [authBusy,    setAuthBusy]    = useState(false);
   const [showPwd,     setShowPwd]     = useState(false);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setAuthLoading(false);
-    });
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, s) => setSession(s));
-    return () => subscription.unsubscribe();
-  }, []);
+  const initialDraftRef           = useRef(null);
+  if (initialDraftRef.current === null) initialDraftRef.current = ls.get(ACTIVE_WORKOUT_KEY, false);
+  const initialDraft              = initialDraftRef.current || null;
+  const initialCur                = initialDraft?.cur && !initialDraft.cur.completed ? initialDraft.cur : null;
+  const initialScreen             = initialCur ? (initialDraft.screen === "select" ? "select" : "exec") : "home";
 
-  const [screen, setScreen]       = useState("home");
+  const [screen, setScreen]       = useState(initialScreen);
   const [exercises, setExercises] = useState([]);
   const [workouts,  setWorkouts]  = useState([]);
   const prevWorkoutsRef           = useRef([]);
   const workoutsRef               = useRef([]);
   const loadSeqRef                = useRef(0);
-  const [cur, setCur]             = useState(null);
+  const [cur, setCur]             = useState(initialCur);
+  const curRef                    = useRef(initialCur);
+  const manualLogoutRef           = useRef(false);
   const [date, setDate]           = useState(todayISO);
   const userId                    = session?.user?.id || null;
+
+  useEffect(() => {
+    let alive = true;
+    withTimeout(supabase.auth.getSession(), "проверка сессии", SESSION_TIMEOUT_MS)
+      .then(({ data: { session } }) => {
+        if (!alive) return;
+        if (session) {
+          setSession(session);
+        }
+        setAuthLoading(false);
+      })
+      .catch(() => {
+        if (alive) setAuthLoading(false);
+      });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, s) => {
+      if (s) {
+        manualLogoutRef.current = false;
+        setSession(s);
+        return;
+      }
+      if (event === "SIGNED_OUT" && curRef.current && !manualLogoutRef.current) {
+        return;
+      }
+      setSession(null);
+    });
+    return () => {
+      alive = false;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Update date on tab focus (user may have left app open overnight)
   useEffect(() => {
@@ -493,6 +555,18 @@ export default function App() {
   useEffect(() => {
     workoutsRef.current = workouts;
   }, [workouts]);
+
+  useEffect(() => {
+    curRef.current = cur;
+  }, [cur]);
+
+  useEffect(() => {
+    if (cur && (screen === "select" || screen === "exec")) {
+      ls.set(ACTIVE_WORKOUT_KEY, { cur, screen, savedAt: new Date().toISOString() });
+    } else if (!cur) {
+      ls.remove(ACTIVE_WORKOUT_KEY);
+    }
+  }, [cur, screen]);
 
   // ── LOAD DATA FROM SUPABASE ───────────────────────────────────────────────
   useEffect(() => {
@@ -565,6 +639,32 @@ export default function App() {
     toastTimer.current = setTimeout(() => setToast(null), 2400);
   };
 
+  const ensureSessionForSave = async () => {
+    try {
+      const { data: { session: current } } = await withTimeout(
+        supabase.auth.getSession(),
+        "проверка сессии",
+        SESSION_TIMEOUT_MS
+      );
+      if (current) {
+        setSession(current);
+        return current;
+      }
+      const { data, error } = await withTimeout(
+        supabase.auth.refreshSession(),
+        "обновление сессии",
+        SESSION_TIMEOUT_MS
+      );
+      if (error || !data?.session) throw error || new Error("No active session");
+      setSession(data.session);
+      return data.session;
+    } catch (error) {
+      console.error("Failed to refresh Supabase session", error);
+      showToast("Не удалось связаться с базой. Данные тренировки сохранены на устройстве.");
+      return null;
+    }
+  };
+
   const stopDragAutoScroll = () => {
     autoScrollSpeedRef.current = 0;
     if (autoScrollRef.current) {
@@ -626,16 +726,25 @@ export default function App() {
     loadSeqRef.current++;
     const prev = exercises;
     setExercises(d);
-    if (!session) return true;
-    const { error } = await supabase.from("exercises").upsert({ user_id: session.user.id, data: d });
-    if (error) {
-      console.error("Failed to save exercises", error);
+    const activeSession = await ensureSessionForSave();
+    if (!activeSession) {
       setExercises(prev);
-      showToast("Не удалось сохранить базу упражнений");
       return false;
     }
-    return true;
-  }, [exercises, session]);
+    try {
+      const { error } = await retrySupabase(
+        () => supabase.from("exercises").upsert({ user_id: activeSession.user.id, data: d }),
+        "сохранение базы упражнений"
+      );
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error("Failed to save exercises", error);
+      setExercises(prev);
+      showToast("Не удалось сохранить базу упражнений. Попробуйте ещё раз.");
+      return false;
+    }
+  }, [exercises]);
 
   const saveWo = useCallback(async (newArr) => {
     loadSeqRef.current++;
@@ -643,8 +752,14 @@ export default function App() {
     const prevRef = prevWorkoutsRef.current;
     workoutsRef.current = newArr;
     setWorkouts(newArr);
-    if (!userId) { prevWorkoutsRef.current = newArr; return true; }
-    const uid    = userId;
+    const activeSession = await ensureSessionForSave();
+    if (!activeSession) {
+      workoutsRef.current = prevArr;
+      setWorkouts(prevArr);
+      prevWorkoutsRef.current = prevRef;
+      return false;
+    }
+    const uid    = activeSession.user.id;
     const oldArr = prevWorkoutsRef.current;
     prevWorkoutsRef.current = newArr;
     try {
@@ -652,17 +767,26 @@ export default function App() {
       const newMap = new Map(newArr.map(w => [w.id, w]));
       const deletedIds = oldArr.filter(w => !newMap.has(w.id)).map(w => w.id);
       if (deletedIds.length) {
-        const { error } = await supabase.from("workouts").delete().in("id", deletedIds).eq("user_id", uid);
+        const { error } = await retrySupabase(
+          () => supabase.from("workouts").delete().in("id", deletedIds).eq("user_id", uid),
+          "удаление тренировки"
+        );
         if (error) throw error;
       }
       const inserted = newArr.filter(w => !oldMap.has(w.id));
       if (inserted.length) {
-        const { error } = await supabase.from("workouts").insert(inserted.map(w => ({ id: w.id, user_id: uid, data: w })));
+        const { error } = await retrySupabase(
+          () => supabase.from("workouts").upsert(inserted.map(w => ({ id: w.id, user_id: uid, data: w }))),
+          "сохранение тренировки"
+        );
         if (error) throw error;
       }
       const updated = newArr.filter(w => oldMap.has(w.id) && JSON.stringify(oldMap.get(w.id)) !== JSON.stringify(w));
       for (const w of updated) {
-        const { error } = await supabase.from("workouts").update({ data: w }).eq("id", w.id).eq("user_id", uid);
+        const { error } = await retrySupabase(
+          () => supabase.from("workouts").update({ data: w }).eq("id", w.id).eq("user_id", uid),
+          "обновление тренировки"
+        );
         if (error) throw error;
       }
       return true;
@@ -671,10 +795,10 @@ export default function App() {
       workoutsRef.current = prevArr;
       setWorkouts(prevArr);
       prevWorkoutsRef.current = prevRef;
-      showToast("Не удалось сохранить тренировку");
+      showToast("Не удалось сохранить тренировку. Она осталась на устройстве, попробуйте ещё раз.");
       return false;
     }
-  }, [userId]);
+  }, []);
 
   const confirm = (msg, onOk, opts = {}) => setConfirmDialog({
     msg,
@@ -928,9 +1052,10 @@ export default function App() {
   };
 
   // ── BODY WEIGHT ───────────────────────────────────────────────────────────
-  const saveBodyWeight = (woId, value) => {
+  const saveBodyWeight = async (woId, value) => {
     const bw = value.trim();
-    saveWo(workoutsRef.current.map(w => w.id === woId ? { ...w, bodyWeight: bw } : w));
+    const ok = await saveWo(workoutsRef.current.map(w => w.id === woId ? { ...w, bodyWeight: bw } : w));
+    if (!ok) return;
     setBodyWeightModal(null);
     if (bw) showToast(`✓ Вес тела ${bw} кг сохранён`);
   };
@@ -1359,7 +1484,10 @@ export default function App() {
     setAuthBusy(false);
   };
 
-  const doLogout = () => supabase.auth.signOut();
+  const doLogout = () => {
+    manualLogoutRef.current = true;
+    supabase.auth.signOut();
+  };
 
   // ── UI ────────────────────────────────────────────────────────────────────
   const Nav = ({ label }) => (
@@ -2038,8 +2166,8 @@ export default function App() {
                 Если выбрать “нет”, тренировка сохранится в истории, но последние веса, повторы, дата и комментарии в базе упражнений не изменятся.
               </div>
               <div className="confirm-acts">
-                <Btn c="ghost" sm onClick={() => completeWorkout(false)}>{finishBusy ? "…" : "Нет, только история"}</Btn>
-                <Btn c="green" sm onClick={() => completeWorkout(true)}>{finishBusy ? "…" : "Да, обновить базу"}</Btn>
+                <Btn c="ghost" sm onClick={() => completeWorkout(false)} disabled={finishBusy}>{finishBusy ? "…" : "Нет, только история"}</Btn>
+                <Btn c="green" sm onClick={() => completeWorkout(true)} disabled={finishBusy}>{finishBusy ? "…" : "Да, обновить базу"}</Btn>
                 <Btn c="ghost" sm onClick={() => setFinishPrompt(false)} disabled={finishBusy}>Вернуться к тренировке</Btn>
               </div>
             </div>
