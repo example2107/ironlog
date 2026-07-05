@@ -1205,7 +1205,7 @@ export default function App() {
         return;
       }
       group.exercises.forEach((ex, i) => {
-        t += `${i + 1}. ${ex.name}\n`;
+        t += `${i + 1}. ${ex.name}${ex.subtype ? `  🏷 ${ex.subtype}` : ""}\n`;
         const meta = [];
         if (ex.last_weight != null && ex.last_weight !== "") meta.push(`💪 ${ex.last_weight} кг`);
         if (ex.last_reps) meta.push(`📊 ${ex.last_reps}`);
