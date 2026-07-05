@@ -870,6 +870,11 @@ export default function App() {
     setScreen("select");
   };
 
+  const resumeWorkout = () => {
+    const draft = ls.get(ACTIVE_WORKOUT_KEY, null);
+    setScreen(draft?.screen === "select" ? "select" : "exec");
+  };
+
   const toggleEx = (ex, groupName) => {
     const exists = cur?.exercises.some(e => e.id === ex.id);
     if (exists) {
@@ -1632,7 +1637,9 @@ export default function App() {
                 <div className="g-stat-l">Последняя тренировка</div>
               </div>
             </div>
-            <Btn c="acid" full onClick={startCreate}>+ Начать тренировку</Btn>
+            {cur && !cur.completed
+              ? <Btn c="green" full onClick={resumeWorkout}>▶ Продолжить тренировку</Btn>
+              : <Btn c="acid" full onClick={startCreate}>Начать тренировку</Btn>}
           </>}
 
           {/* SELECT */}
