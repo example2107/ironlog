@@ -1112,6 +1112,46 @@ export default function App() {
     }
   };
 
+  const formatExerciseBase = (groups) => {
+    let t = `🗂 БАЗА УПРАЖНЕНИЙ\n`;
+    const total = groups.reduce((s, g) => s + g.exercises.length, 0);
+    t += `${total} упражнений · ${groups.length} групп\n`;
+    t += `${"═".repeat(34)}\n\n`;
+    groups.forEach(group => {
+      t += `💪 ${group.name}\n`;
+      if (!group.exercises.length) {
+        t += `   —\n\n`;
+        return;
+      }
+      group.exercises.forEach((ex, i) => {
+        t += `${i + 1}. ${ex.name}\n`;
+        const meta = [];
+        if (ex.last_weight != null && ex.last_weight !== "") meta.push(`💪 ${ex.last_weight} кг`);
+        if (ex.last_reps) meta.push(`📊 ${ex.last_reps}`);
+        if (ex.last_date) meta.push(`📅 ${fmtDate(ex.last_date)}`);
+        t += `   ${meta.length ? meta.join(" · ") : "Не выполнялось"}\n`;
+        if (ex.comment) t += `   💬 ${ex.comment}\n`;
+      });
+      t += "\n";
+    });
+    return t;
+  };
+
+  const exportExercises = async () => {
+    if (!exercises.length) {
+      showToast("База упражнений пуста");
+      return;
+    }
+    const text = formatExerciseBase(exercises).trimEnd();
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("Clipboard is unavailable");
+      await navigator.clipboard.writeText(text);
+      showToast("✓ База упражнений скопирована");
+    } catch {
+      showToast("Не удалось скопировать. Разрешите доступ к буферу обмена.");
+    }
+  };
+
   const delWo = id => confirm("Удалить тренировку?", () => {
     const source = workoutsRef.current;
     const removed = source.find(w => w.id === id);
@@ -1906,6 +1946,11 @@ export default function App() {
                 <button className="modal-x" onClick={closeLibrary} title="Закрыть">×</button>
               </div>
               <div className="g-modal-sub">{totalEx} упражнений · {exercises.length} групп · ⠿ перетащить</div>
+              {totalEx > 0 && (
+                <div style={{marginBottom:16}}>
+                  <Btn c="ghost" sm onClick={exportExercises}>📋 Экспортировать базу</Btn>
+                </div>
+              )}
 
               {exercises.map(group => (
                 <div key={group.slug} className="lib-section">
