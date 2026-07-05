@@ -965,6 +965,20 @@ export default function App() {
     showToast("Упражнение добавлено");
   };
 
+  const openReplaceHistory = (index) => setInsertExerciseModal({ target: "history", index, mode: "replace" });
+
+  // Замена упражнения в тренировке из истории: меняем идентичность (id/имя/группа),
+  // сохраняя записанные подходы и комментарий. База пересчитается при сохранении
+  // (saveEditedWorkout учитывает и старый, и новый id упражнения).
+  const replaceHistoryExercise = (index, ex, groupName) => {
+    setEditingWorkout(p => p ? ({
+      ...p,
+      exercises: p.exercises.map((item, i) => i === index ? { ...item, id: ex.id, name: ex.name, group: groupName } : item),
+    }) : p);
+    setInsertExerciseModal(null);
+    showToast("Упражнение заменено");
+  };
+
   const updateCurExercise = (exId, updater) =>
     setCur(p => {
       if (!p) return p;
@@ -1955,6 +1969,7 @@ export default function App() {
                   <div className="hist-edit-head">
                     <div className="hist-edit-title">{exIdx + 1}. {ex.name}</div>
                     <div className="g-ecard-actions">
+                      <button className="ib edit" onClick={() => openReplaceHistory(exIdx)} title="Заменить упражнение">⇄</button>
                       <button className="ib edit" onClick={() => moveEditWorkoutExercise(exIdx, -1)} disabled={exIdx === 0} title="Выше">↑</button>
                       <button className="ib edit" onClick={() => moveEditWorkoutExercise(exIdx, 1)} disabled={exIdx === editingWorkout.exercises.length - 1} title="Ниже">↓</button>
                       <button className="ib del" onClick={() => removeEditWorkoutExercise(exIdx)} title="Удалить из этой тренировки">🗑</button>
@@ -2198,6 +2213,7 @@ export default function App() {
 
         {/* INSERT EXERCISE MODAL */}
         {insertExerciseModal && (() => {
+          const isReplace = insertExerciseModal.mode === "replace";
           const selectedIds = new Set(
             (insertExerciseModal.target === "history" ? editingWorkout?.exercises : cur?.exercises || [])
               ?.map(e => e.id) || []
@@ -2210,13 +2226,15 @@ export default function App() {
               <div className="g-modal" style={{maxWidth:520}} onMouseDown={e => e.stopPropagation()}>
                 <div className="g-modal-head">
                   <div>
-                    <div className="g-modal-t">Добавить упражнение</div>
-                    <div className="g-modal-sub" style={{marginBottom:0}}>Выберите упражнение из базы</div>
+                    <div className="g-modal-t">{isReplace ? "Заменить упражнение" : "Добавить упражнение"}</div>
+                    <div className="g-modal-sub" style={{marginBottom:0}}>
+                      {isReplace ? "Выберите упражнение на замену — подходы сохранятся" : "Выберите упражнение из базы"}
+                    </div>
                   </div>
                   <button className="modal-x" onClick={() => setInsertExerciseModal(null)} title="Закрыть">×</button>
                 </div>
                 {groupsWithOptions.length === 0
-                  ? <div className="g-empty" style={{padding:"30px 10px"}}>Все упражнения уже добавлены</div>
+                  ? <div className="g-empty" style={{padding:"30px 10px"}}>{isReplace ? "Нет доступных упражнений на замену" : "Все упражнения уже добавлены"}</div>
                   : groupsWithOptions.map(group => (
                     <div key={group.slug} className="lib-section">
                       <div className="lib-group-row">
@@ -2225,7 +2243,9 @@ export default function App() {
                       <div className="replace-list">
                         {group.exercises.map(ex => (
                           <button key={ex.id} type="button" className="replace-item"
-                            onClick={() => insertExerciseAt(insertExerciseModal.target, insertExerciseModal.index, ex, group.name)}>
+                            onClick={() => isReplace
+                              ? replaceHistoryExercise(insertExerciseModal.index, ex, group.name)
+                              : insertExerciseAt(insertExerciseModal.target, insertExerciseModal.index, ex, group.name)}>
                             <div className="replace-name">{ex.name}</div>
                             <div className="replace-meta">
                               {ex.last_date ? `Прошлый раз ${fmtDate(ex.last_date)}` : "Ещё не выполнялось"}
