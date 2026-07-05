@@ -513,6 +513,23 @@ const makeWorkoutExercise = (ex, groupName, includeDone = false) => ({
 
 const stripDoneFromWorkoutExercise = ({ done, ...ex }) => ex;
 
+// Module-level so its identity is stable across renders (иначе input теряет фокус на каждой букве)
+const SubtypeField = ({ value, onChange, subtypes }) => (
+  <div className="g-field">
+    <label>Под-тип (для чередования в рекомендациях)</label>
+    {subtypes.length > 0 && (
+      <div className="g-badges" style={{marginBottom:8}}>
+        {subtypes.map(s => (
+          <button key={s} type="button" className="subtype-chip" data-on={value===s ? "1" : undefined}
+            onClick={() => onChange(value === s ? "" : s)}>{s}</button>
+        ))}
+      </div>
+    )}
+    <input type="text" placeholder="напр. Горизонтальные (необязательно)" value={value}
+      onChange={e => onChange(e.target.value)}/>
+  </div>
+);
+
 // ─── APP ─────────────────────────────────────────────────────────────────────
 export default function App() {
   // ── AUTH STATE ────────────────────────────────────────────────────────────
@@ -1581,21 +1598,6 @@ export default function App() {
     if (!g) return [];
     return [...new Set(g.exercises.map(e => e.subtype && String(e.subtype).trim()).filter(Boolean))];
   };
-  const SubtypeField = ({ value, onChange, subtypes }) => (
-    <div className="g-field">
-      <label>Под-тип (для чередования в рекомендациях)</label>
-      {subtypes.length > 0 && (
-        <div className="g-badges" style={{marginBottom:8}}>
-          {subtypes.map(s => (
-            <button key={s} type="button" className="subtype-chip" data-on={value===s ? "1" : undefined}
-              onClick={() => onChange(value === s ? "" : s)}>{s}</button>
-          ))}
-        </div>
-      )}
-      <input type="text" placeholder="напр. Горизонтальные (необязательно)" value={value}
-        onChange={e => onChange(e.target.value)}/>
-    </div>
-  );
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   if (authLoading) return (
