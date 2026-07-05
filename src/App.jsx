@@ -309,6 +309,12 @@ body{background:#0a0a0f;}
   display:flex;align-items:center;justify-content:center;}
 .group-drop-zone.active::after{content:'переместить сюда';color:var(--acid);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
 .edit-box{background:var(--ink4);border:1px solid var(--line2);border-radius:10px;padding:14px;margin:6px 0 8px 0;}
+.subtype-chip{background:var(--ink3);border:1px solid var(--line2);border-radius:100px;padding:5px 12px;
+  font-size:12px;color:var(--snow2);font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.14s;}
+.subtype-chip:hover{border-color:rgba(200,255,0,0.35);color:var(--snow);}
+.subtype-chip[data-on="1"]{background:var(--acid-dim);border-color:var(--acid);color:var(--acid);}
+.subtype-tag{margin-left:7px;font-size:10px;font-weight:600;color:var(--blue);background:var(--blue-dim);
+  border:1px solid rgba(56,189,248,0.2);padding:1px 8px;border-radius:100px;letter-spacing:0;white-space:nowrap;}
 
 /* MISC */
 .g-crumb{font-size:12px;color:var(--steel);margin-bottom:18px;display:flex;align-items:center;gap:6px;}
@@ -438,17 +444,38 @@ const todayISO = () => {
   return `${year}-${month}-${day}`;
 };
 
+const subtypeKey = (ex) => (ex.subtype && String(ex.subtype).trim()) ? String(ex.subtype).trim() : null;
+
+// Дата как число для сравнения «давности». Не выполнялось → самое давнее.
+const dateVal = (d) => (d ? new Date(d).getTime() : -Infinity);
+
+// Рекомендация «что дольше всего не делал», двухшагово:
+//  — упражнения группируются по под-типу (метке); неразмеченное = под-тип из себя,
+//    поэтому для групп без разметки поведение = старому (самое давнее упражнение);
+//  — шаг 1: под-тип, который в целом дольше всего не тренировался
+//    (его самая свежая дата — минимальна; не выполнявшийся под-тип = самый давний);
+//  — шаг 2: внутри выбранного под-типа — самое давнее / не выполнявшееся.
+// Ничьи разрешаются стабильно по порядку в группе.
 const getRecId = (group) => {
-  if (!group.exercises.length) return null;
-  return [...group.exercises].sort((a, b) => {
-    if (!a.last_date && !b.last_date) return 0;
-    if (!a.last_date) return -1;
-    if (!b.last_date) return 1;
-    return new Date(a.last_date) - new Date(b.last_date);
-  })[0].id;
+  const exs = group.exercises;
+  if (!exs.length) return null;
+  const buckets = new Map();
+  exs.forEach((ex, order) => {
+    const label = subtypeKey(ex);
+    const key = label ? `s:${label}` : `u:${ex.id}`;
+    if (!buckets.has(key)) buckets.set(key, { order, items: [] });
+    buckets.get(key).items.push({ ex, order });
+  });
+  let best = null;
+  for (const b of buckets.values()) {
+    const freshness = Math.max(...b.items.map(it => dateVal(it.ex.last_date)));
+    if (!best || freshness < best.freshness) best = { freshness, ...b };
+  }
+  const pick = best.items.reduce((a, c) => dateVal(c.ex.last_date) < dateVal(a.ex.last_date) ? c : a);
+  return pick.ex.id;
 };
 
-const emptyExForm = { groupIdx: "", name: "", w: "", s: "", r: "", d: "", c: "" };
+const emptyExForm = { groupIdx: "", name: "", w: "", s: "", r: "", d: "", c: "", sub: "" };
 
 const buildSets = (lw, lr) => {
   if (!lr) return [{ weight: lw != null ? String(lw) : "", reps: "" }];
@@ -1294,6 +1321,7 @@ export default function App() {
       id: nextId, name: exForm.name.trim(),
       last_weight: exForm.w !== "" ? exForm.w : null,
       last_reps: repsStr, last_date: exForm.d || null, comment: exForm.c.trim() || null,
+      subtype: exForm.sub.trim() || null,
     }]} : g));
     setExForm(emptyExForm); showToast("✓ Упражнение добавлено");
   };
@@ -1303,7 +1331,7 @@ export default function App() {
     setEditingEx({ groupName, exId: ex.id, f: {
       name: ex.name, w: ex.last_weight != null ? String(ex.last_weight) : "",
       s: parts[0] || "", r: parts.slice(1).join("x") || "",
-      d: ex.last_date || "", c: ex.comment || "",
+      d: ex.last_date || "", c: ex.comment || "", sub: ex.subtype || "",
     }});
     setEditingGrp(null);
   };
@@ -1314,7 +1342,8 @@ export default function App() {
     const repsStr = f.s && f.r ? `${f.s}x${f.r}` : (f.r || null);
     saveEx(exercises.map(g => g.name === groupName ? { ...g, exercises: g.exercises.map(ex =>
       ex.id === exId ? { ...ex, name: f.name.trim(), last_weight: f.w !== "" ? f.w : null,
-        last_reps: repsStr, last_date: f.d || null, comment: f.c.trim() || null } : ex
+        last_reps: repsStr, last_date: f.d || null, comment: f.c.trim() || null,
+        subtype: f.sub.trim() || null } : ex
     )} : g));
     setEditingEx(null); showToast("✓ Упражнение обновлено");
   };
@@ -1546,6 +1575,26 @@ export default function App() {
   );
   const IB = ({ type, onClick, title }) => (
     <button className={`ib ${type}`} onClick={onClick} title={title}>{type==="del"?"🗑":"✏️"}</button>
+  );
+  const getGroupSubtypes = (groupName) => {
+    const g = exercises.find(x => x.name === groupName);
+    if (!g) return [];
+    return [...new Set(g.exercises.map(e => e.subtype && String(e.subtype).trim()).filter(Boolean))];
+  };
+  const SubtypeField = ({ value, onChange, subtypes }) => (
+    <div className="g-field">
+      <label>Под-тип (для чередования в рекомендациях)</label>
+      {subtypes.length > 0 && (
+        <div className="g-badges" style={{marginBottom:8}}>
+          {subtypes.map(s => (
+            <button key={s} type="button" className="subtype-chip" data-on={value===s ? "1" : undefined}
+              onClick={() => onChange(value === s ? "" : s)}>{s}</button>
+          ))}
+        </div>
+      )}
+      <input type="text" placeholder="напр. Горизонтальные (необязательно)" value={value}
+        onChange={e => onChange(e.target.value)}/>
+    </div>
   );
 
   // ── RENDER ────────────────────────────────────────────────────────────────
@@ -2003,7 +2052,7 @@ export default function App() {
                         draggable onDragStart={e => onDragStart(e, ex.id, group.name)} onDragEnd={onDragEnd}>
                         <span className="drag-handle" onTouchStart={e => startTouchDrag(e, ex.id, group.name)}>⠿</span>
                         <div className="lib-ex-info">
-                          <div className="lib-ex-name">{ex.name}</div>
+                          <div className="lib-ex-name">{ex.name}{ex.subtype ? <span className="subtype-tag">{ex.subtype}</span> : null}</div>
                           <div className="lib-ex-meta">
                             {ex.last_date ? `📅 ${fmtDate(ex.last_date)}` : "Не выполнялось"}
                             {ex.last_weight != null && ex.last_weight !== "" ? `  ·  💪 ${ex.last_weight} кг` : ""}
@@ -2052,6 +2101,8 @@ export default function App() {
                             <label>Комментарий</label>
                             <textarea rows={2} value={editingEx.f.c} onChange={e => upEditEx("c", e.target.value)}/>
                           </div>
+                          <SubtypeField value={editingEx.f.sub} onChange={v => upEditEx("sub", v)}
+                            subtypes={getGroupSubtypes(group.name)}/>
                           <div className="g-row">
                             <Btn c="acid" sm onClick={saveEditEx}>Сохранить</Btn>
                             <Btn c="ghost" sm onClick={() => setEditingEx(null)}>Отмена</Btn>
@@ -2106,6 +2157,8 @@ export default function App() {
                   <label>Комментарий</label>
                   <textarea rows={2} placeholder="Заметка..." value={exForm.c} onChange={e => upEx("c", e.target.value)}/>
                 </div>
+                <SubtypeField value={exForm.sub} onChange={v => upEx("sub", v)}
+                  subtypes={exForm.groupIdx !== "" ? getGroupSubtypes(exercises[parseInt(exForm.groupIdx)]?.name) : []}/>
                 <Btn c="acid" sm onClick={handleAddExercise}>+ Добавить упражнение</Btn>
               </div>
 
