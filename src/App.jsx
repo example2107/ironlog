@@ -2,55 +2,52 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "./supabase";
 
 // ─── DEFAULT DATA ─────────────────────────────────────────────────────────────
+// Пустое упражнение для стартовой базы: без веса/повторов/даты/комментария («Не выполнялось»).
+const seedEx = (id, name, subtype = null) => ({
+  id, name, last_weight: null, last_reps: null, last_date: null, comment: null,
+  ...(subtype ? { subtype } : {}),
+});
 const DEFAULT_EXERCISES = [
   { name: "Ноги — Квадрицепсы", slug: "legs_quads", exercises: [
-    { id: 1,  name: "Приседания со штангой",        last_weight: "40",         last_reps: "3x10", last_date: "2026-03-05", comment: "можно прибавить до 45 кг." },
-    { id: 2,  name: "Гакк-приседания",              last_weight: "50",         last_reps: "3x10", last_date: "2026-03-05", comment: "можно прибавлять до 55 кг." },
-    { id: 3,  name: "Жим ногами",                   last_weight: "75",         last_reps: "3x10", last_date: "2026-02-05", comment: "прибавить вес до 80 кг." },
+    seedEx(1, "Приседания со штангой"),
+    seedEx(2, "Гакк-приседания"),
+    seedEx(3, "Жим ногами"),
   ]},
   { name: "Ноги — Задняя поверхность + Ягодицы", slug: "legs_posterior", exercises: [
-    { id: 4,  name: "Становая тяга",                last_weight: "50",         last_reps: "3x8",  last_date: "2026-02-05", comment: "прибавить вес до 55 кг." },
-    { id: 5,  name: "Румынская тяга",               last_weight: "40",         last_reps: "3x10", last_date: "2026-02-01", comment: "прибавить до 45 кг. и делать по 8 повторений" },
-    { id: 6,  name: "Гиперэкстензия",              last_weight: "5",          last_reps: "3x12", last_date: "2026-01-23", comment: "прибавить вес до 7.5 кг." },
+    seedEx(4, "Становая тяга"),
+    seedEx(5, "Румынская тяга"),
+    seedEx(6, "Гиперэкстензия"),
   ]},
-  { name: "Спина — Ширина", slug: "back_width", exercises: [
-    { id: 7,  name: "Тяга вертикального блока широким хватом", last_weight: "40-40-45", last_reps: "3x10", last_date: "2026-01-13", comment: "Сделать все подходы 45 кг." },
-    { id: 8,  name: "Тяга вертикального блока средним хватом", last_weight: "40",       last_reps: "3x10", last_date: "2026-03-05", comment: "прибавить вес до 45 кг." },
-    { id: 9,  name: "Тяга вертикального блока в хаммере",      last_weight: "50",       last_reps: "3x10", last_date: "2026-01-23", comment: "прибавляем до 55 кг." },
+  { name: "Грудь", slug: "chest", exercises: [
+    seedEx(7,  "Жим штанги лёжа (свободный вес)",       "Горизонтальные"),
+    seedEx(8,  "Horizontal Bench Press (тренажёр)",      "Горизонтальные"),
+    seedEx(9,  "Жим гантелей на горизонтальной скамье", "Горизонтальные"),
+    seedEx(10, "Жим штанги на наклонной скамье",        "Наклонные"),
+    seedEx(11, "Жим гантелей на наклонной скамье",      "Наклонные"),
   ]},
-  { name: "Спина — Толщина", slug: "back_thickness", exercises: [
-    { id: 10, name: "Тяга горизонтального блока к поясу", last_weight: "30", last_reps: "4x10", last_date: "2026-01-17", comment: "Было легко, прибавляй до 40 кг. и делай 3 подхода" },
-    { id: 11, name: "Тяга т-грифа",                      last_weight: "30", last_reps: "3x10", last_date: "2026-02-01", comment: "Можно прибавить до 32.5 кг." },
+  { name: "Спина", slug: "back", exercises: [
+    seedEx(12, "Тяга вертикального блока широким хватом", "Вертикальные"),
+    seedEx(13, "Тяга вертикального блока в хаммере",      "Вертикальные"),
+    seedEx(14, "Тяга горизонтального блока к поясу",      "Горизонтальные"),
+    seedEx(15, "Тяга т-грифа",                            "Горизонтальные"),
   ]},
-  { name: "Грудь — Горизонтальные жимы", slug: "chest_flat", exercises: [
-    { id: 12, name: "Жим штанги лёжа (свободный вес)",       last_weight: "45",         last_reps: "3x8-7-7", last_date: "2026-01-17", comment: "с этим же весом все подходы на 8 повторений" },
-    { id: 13, name: "Horizontal Bench Press (тренажёр)",      last_weight: "50",         last_reps: "3x10",    last_date: "2026-02-05", comment: "прибавляем вес до 55 кг. и делаем 3х8" },
-    { id: 14, name: "Жим гантелей на горизонтальной скамье", last_weight: "15",         last_reps: "3x10",    last_date: "2026-01-20", comment: "Оставить вес таким же" },
-  ]},
-  { name: "Грудь — Наклонные жимы", slug: "chest_incline", exercises: [
-    { id: 15, name: "Жим штанги на наклонной скамье",    last_weight: "40",           last_reps: "3x8",  last_date: "2026-01-20", comment: "можно прибавить вес до 40 кг." },
-    { id: 16, name: "Жим гантелей на наклонной скамье", last_weight: "15-17.5-17.5", last_reps: "3x10", last_date: "2026-01-23", comment: "все подхода 17.5 кг." },
-  ]},
-  { name: "Плечи", slug: "shoulders_press", exercises: [
-    { id: 17, name: "Махи гантелей в сторону",     last_weight: "6",  last_reps: "3x12", last_date: "2026-01-20", comment: "оставить вес таким же" },
-    { id: 18, name: "Жим на плечи в хаммере",      last_weight: "30", last_reps: "3x10", last_date: "2026-02-01", comment: "прибавить до 35 кг." },
-    { id: 19, name: "Обратная бабочка (тренажер)", last_weight: "30", last_reps: "3x12", last_date: "2026-02-05", comment: "Прибавить вес до 33 кг." },
-    { id: 31, name: "Подъем гантелей перед собой", last_weight: "6",  last_reps: "3x12", last_date: "2026-01-23", comment: "оставить таким же вес для закрепления" },
-  ]},
-  { name: "Бицепс", slug: "biceps", exercises: [
-    { id: 20, name: "Подъём гантелей на бицепс стоя",                last_weight: "12.5", last_reps: "3x12", last_date: "2026-02-01", comment: "оставить вес таким же, последний подход на пределе" },
-    { id: 21, name: "Бицепс стоя с EZ-грифом",                       last_weight: "20",   last_reps: "3x12", last_date: "2026-02-05", comment: "Прибавить вес до 22.5 кг." },
-    { id: 22, name: "Бицепс на скамье Скотта",                       last_weight: "13",   last_reps: "3x12", last_date: "2026-01-20", comment: "Оставить вес таким же (10+3)" },
-    { id: 23, name: "Молотковые сгибания на бицепс (скамья Скотта)", last_weight: "10",   last_reps: "3x12", last_date: "2026-01-23", comment: "Прибавить вес до 12 кг." },
+  { name: "Плечи", slug: "shoulders", exercises: [
+    seedEx(16, "Махи гантелей в сторону"),
+    seedEx(17, "Жим на плечи в хаммере"),
+    seedEx(18, "Обратная бабочка (тренажер)"),
   ]},
   { name: "Трицепс", slug: "triceps", exercises: [
-    { id: 24, name: "Тяга косички от груди в кроссовере", last_weight: "25", last_reps: "3x12", last_date: "2026-01-20", comment: "Прибавить до 27 кг" },
-    { id: 29, name: "Triceps extension (тренажер)",        last_weight: "30", last_reps: null,   last_date: "2026-02-05", comment: "прибавить вес до 33 кг." },
-    { id: 30, name: "Seated dip (тренажер)",               last_weight: "50", last_reps: "3x12", last_date: "2026-01-23", comment: "оставить вес таким же для закрепления" },
+    seedEx(19, "Тяга косички от груди в кроссовере"),
+    seedEx(20, "Seated dip (тренажер)"),
+    seedEx(21, "Разгибание из-за головы в блоке"),
+  ]},
+  { name: "Бицепс", slug: "biceps", exercises: [
+    seedEx(22, "Подъём гантелей на бицепс стоя"),
+    seedEx(23, "Бицепс на скамье Скотта"),
+    seedEx(24, "Молотковые сгибания на бицепс (скамья Скотта)"),
   ]},
   { name: "Пресс", slug: "abs", exercises: [
-    { id: 27, name: "Подъём коленей в висе",       last_weight: "0",  last_reps: "3x12", last_date: "2026-01-23", comment: "легче, чем в прошлый раз" },
-    { id: 28, name: "Abdominal crunch (тренажер)", last_weight: "35", last_reps: "3x12", last_date: "2026-02-05", comment: "прибавить вес до 40 кг." },
+    seedEx(25, "Abdominal crunch (тренажер)"),
   ]},
 ];
 
