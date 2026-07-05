@@ -311,8 +311,7 @@ body{background:#0a0a0f;}
 .edit-box{background:var(--ink4);border:1px solid var(--line2);border-radius:10px;padding:14px;margin:6px 0 8px 0;}
 .subtype-chip{background:var(--ink3);border:1px solid var(--line2);border-radius:100px;padding:5px 12px;
   font-size:12px;color:var(--snow2);font-family:'DM Sans',sans-serif;cursor:pointer;transition:all 0.14s;}
-.subtype-chip:hover{border-color:rgba(200,255,0,0.35);color:var(--snow);}
-.subtype-chip[data-on="1"]{background:var(--acid-dim);border-color:var(--acid);color:var(--acid);}
+.subtype-chip:active{opacity:0.75;}
 .subtype-tag{margin-left:7px;font-size:10px;font-weight:600;color:var(--blue);background:var(--blue-dim);
   border:1px solid rgba(56,189,248,0.2);padding:1px 8px;border-radius:100px;letter-spacing:0;white-space:nowrap;}
 
@@ -513,16 +512,31 @@ const makeWorkoutExercise = (ex, groupName, includeDone = false) => ({
 
 const stripDoneFromWorkoutExercise = ({ done, ...ex }) => ex;
 
+// Палитра цветов под-типов: цвет назначается по порядку под-типа внутри группы.
+const SUBTYPE_COLORS = [
+  { fg: "#38bdf8", bg: "rgba(56,189,248,0.12)",  bd: "rgba(56,189,248,0.32)" },  // синий
+  { fg: "#a259ff", bg: "rgba(162,89,255,0.14)",  bd: "rgba(162,89,255,0.34)" },  // фиолетовый
+  { fg: "#1aff8c", bg: "rgba(26,255,140,0.12)",  bd: "rgba(26,255,140,0.32)" },  // зелёный
+  { fg: "#ffaa00", bg: "rgba(255,170,0,0.12)",   bd: "rgba(255,170,0,0.32)" },   // янтарный
+  { fg: "#ff6ec7", bg: "rgba(255,110,199,0.12)", bd: "rgba(255,110,199,0.34)" }, // розовый
+];
+const subtypeColorAt = (i) => SUBTYPE_COLORS[((i < 0 ? 0 : i) % SUBTYPE_COLORS.length)];
+
 // Module-level so its identity is stable across renders (иначе input теряет фокус на каждой букве)
 const SubtypeField = ({ value, onChange, subtypes }) => (
   <div className="g-field">
     <label>Под-тип (для чередования в рекомендациях)</label>
     {subtypes.length > 0 && (
       <div className="g-badges" style={{marginBottom:8}}>
-        {subtypes.map(s => (
-          <button key={s} type="button" className="subtype-chip" data-on={value===s ? "1" : undefined}
-            onClick={() => onChange(value === s ? "" : s)}>{s}</button>
-        ))}
+        {subtypes.map((s, i) => {
+          const c = subtypeColorAt(i);
+          const on = value === s;
+          return (
+            <button key={s} type="button" className="subtype-chip"
+              style={{ color: c.fg, borderColor: on ? c.fg : c.bd, background: on ? c.bg : "transparent", fontWeight: on ? 700 : 500 }}
+              onClick={() => onChange(on ? "" : s)}>{s}</button>
+          );
+        })}
       </div>
     )}
     <input type="text" placeholder="напр. Горизонтальные (необязательно)" value={value}
@@ -1598,6 +1612,10 @@ export default function App() {
     if (!g) return [];
     return [...new Set(g.exercises.map(e => e.subtype && String(e.subtype).trim()).filter(Boolean))];
   };
+  const subtypeStyle = (groupName, subtype) => {
+    const c = subtypeColorAt(getGroupSubtypes(groupName).indexOf(String(subtype).trim()));
+    return { color: c.fg, background: c.bg, borderColor: c.bd };
+  };
 
   // ── RENDER ────────────────────────────────────────────────────────────────
   if (authLoading) return (
@@ -2054,7 +2072,7 @@ export default function App() {
                         draggable onDragStart={e => onDragStart(e, ex.id, group.name)} onDragEnd={onDragEnd}>
                         <span className="drag-handle" onTouchStart={e => startTouchDrag(e, ex.id, group.name)}>⠿</span>
                         <div className="lib-ex-info">
-                          <div className="lib-ex-name">{ex.name}{ex.subtype ? <span className="subtype-tag">{ex.subtype}</span> : null}</div>
+                          <div className="lib-ex-name">{ex.name}{ex.subtype ? <span className="subtype-tag" style={subtypeStyle(group.name, ex.subtype)}>{ex.subtype}</span> : null}</div>
                           <div className="lib-ex-meta">
                             {ex.last_date ? `📅 ${fmtDate(ex.last_date)}` : "Не выполнялось"}
                             {ex.last_weight != null && ex.last_weight !== "" ? `  ·  💪 ${ex.last_weight} кг` : ""}
