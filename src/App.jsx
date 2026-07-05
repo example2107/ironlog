@@ -560,7 +560,11 @@ export default function App() {
   const initialStarted            = initialDraft?.cur && !initialDraft.cur.completed
                                     && (initialDraft.cur.started || initialDraft.screen === "exec");
   const initialCur                = initialStarted ? { ...initialDraft.cur, started: true } : null;
-  const initialScreen             = initialCur ? "exec" : "home";
+  // Восстанавливаем экран, на котором был пользователь: если он ушёл на главную/историю,
+  // обновление не должно затаскивать обратно в тренировку — он сам нажмёт «Продолжить».
+  const initialScreen             = initialCur
+                                    ? (initialDraft.screen === "home" || initialDraft.screen === "history" ? initialDraft.screen : "exec")
+                                    : "home";
 
   const [screen, setScreen]       = useState(initialScreen);
   const [exercises, setExercises] = useState([]);
@@ -620,7 +624,7 @@ export default function App() {
   }, [cur]);
 
   useEffect(() => {
-    if (cur && cur.started && !cur.completed && (screen === "select" || screen === "exec")) {
+    if (cur && cur.started && !cur.completed) {
       ls.set(ACTIVE_WORKOUT_KEY, { cur, screen, savedAt: new Date().toISOString() });
     } else if (!cur || !cur.started) {
       ls.remove(ACTIVE_WORKOUT_KEY);
