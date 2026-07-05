@@ -555,8 +555,12 @@ export default function App() {
   const initialDraftRef           = useRef(null);
   if (initialDraftRef.current === null) initialDraftRef.current = ls.get(ACTIVE_WORKOUT_KEY, false);
   const initialDraft              = initialDraftRef.current || null;
-  const initialCur                = initialDraft?.cur && !initialDraft.cur.completed ? initialDraft.cur : null;
-  const initialScreen             = initialCur ? (initialDraft.screen === "select" ? "select" : "exec") : "home";
+  // Активна (восстанавливаемая) только начатая тренировка. Старые черновики на экране
+  // выполнения считаем начатыми ради обратной совместимости.
+  const initialStarted            = initialDraft?.cur && !initialDraft.cur.completed
+                                    && (initialDraft.cur.started || initialDraft.screen === "exec");
+  const initialCur                = initialStarted ? { ...initialDraft.cur, started: true } : null;
+  const initialScreen             = initialCur ? "exec" : "home";
 
   const [screen, setScreen]       = useState(initialScreen);
   const [exercises, setExercises] = useState([]);
@@ -616,12 +620,17 @@ export default function App() {
   }, [cur]);
 
   useEffect(() => {
-    if (cur && (screen === "select" || screen === "exec")) {
+    if (cur && cur.started && !cur.completed && (screen === "select" || screen === "exec")) {
       ls.set(ACTIVE_WORKOUT_KEY, { cur, screen, savedAt: new Date().toISOString() });
-    } else if (!cur) {
+    } else if (!cur || !cur.started) {
       ls.remove(ACTIVE_WORKOUT_KEY);
     }
   }, [cur, screen]);
+
+  // Пока тренировка не начата (только выбор упражнений), выход на главную сбрасывает выбор.
+  useEffect(() => {
+    if (screen === "home" && cur && !cur.started && !cur.completed) setCur(null);
+  }, [screen, cur]);
 
   // ── LOAD DATA FROM SUPABASE ───────────────────────────────────────────────
   useEffect(() => {
@@ -921,14 +930,11 @@ export default function App() {
 
   // ── WORKOUT ──────────────────────────────────────────────────────────────
   const startCreate = () => {
-    setCur({ id: Date.now(), date, exercises: [], bodyWeight: "", completed: false });
+    setCur({ id: Date.now(), date, exercises: [], bodyWeight: "", completed: false, started: false });
     setScreen("select");
   };
 
-  const resumeWorkout = () => {
-    const draft = ls.get(ACTIVE_WORKOUT_KEY, null);
-    setScreen(draft?.screen === "select" ? "select" : "exec");
-  };
+  const resumeWorkout = () => setScreen("exec");
 
   const toggleEx = (ex, groupName) => {
     const exists = cur?.exercises.some(e => e.id === ex.id);
@@ -1066,6 +1072,7 @@ export default function App() {
   const doStart = () => {
     if (!cur?.exercises.length) { showToast("Выберите хотя бы одно упражнение"); return; }
     execCardRefs.current = {};
+    setCur(p => p ? { ...p, started: true } : p);
     setScreen("exec");
   };
 
@@ -1717,7 +1724,7 @@ export default function App() {
                 <div className="g-stat-l">Последняя тренировка</div>
               </div>
             </div>
-            {cur && !cur.completed
+            {cur && cur.started && !cur.completed
               ? <Btn c="green" full onClick={resumeWorkout}>▶ Продолжить тренировку</Btn>
               : <Btn c="acid" full onClick={startCreate}>Начать тренировку</Btn>}
           </>}
