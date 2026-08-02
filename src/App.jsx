@@ -1129,8 +1129,6 @@ export default function App() {
     setFinishBusy(false);
     setCur(null);
     setScreen("home");
-    // Prompt for body weight
-    setBodyWeightModal({ woId: wo.id, value: "" });
     if (updateLibrary && !librarySaved) {
       showToast("Тренировка в истории, база не обновилась");
     }
