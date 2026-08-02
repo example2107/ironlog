@@ -18,20 +18,24 @@ jobs:
       contents: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Query Supabase
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
-          status=$(curl -sS -o /dev/null -w "%{http_code}" \
+          body="$RUNNER_TEMP/response.json"
+          status=$(curl -sS -o "$body" -w "%{http_code}" \
             -H "apikey: $SUPABASE_KEY" \
             -H "Authorization: Bearer $SUPABASE_KEY" \
-            "$SUPABASE_URL/rest/v1/exercises?select=id&limit=1")
+            "${SUPABASE_URL%/}/rest/v1/exercises?select=*&limit=1")
 
           echo "HTTP $status"
           if [ "$status" != "200" ]; then
+            echo "Response body:"
+            cat "$body"
+            echo
             echo "::error::Supabase returned $status instead of 200"
             exit 1
           fi
