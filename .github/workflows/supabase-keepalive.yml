@@ -1,0 +1,56 @@
+name: Supabase keepalive
+
+# Supabase pauses free-tier projects after 7 days without database activity.
+# This workflow queries the database every 3 days to keep it awake.
+#
+# GitHub disables scheduled workflows after 60 days without new commits, so the
+# second step writes a timestamp and commits it when the repo has been quiet.
+
+on:
+  schedule:
+    - cron: "0 6 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Query Supabase
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+        run: |
+          status=$(curl -sS -o /dev/null -w "%{http_code}" \
+            -H "apikey: $SUPABASE_KEY" \
+            -H "Authorization: Bearer $SUPABASE_KEY" \
+            "$SUPABASE_URL/rest/v1/exercises?select=id&limit=1")
+
+          echo "HTTP $status"
+          if [ "$status" != "200" ]; then
+            echo "::error::Supabase returned $status instead of 200"
+            exit 1
+          fi
+
+      - name: Commit if the repo has been quiet
+        run: |
+          days=$(( ( $(date +%s) - $(git log -1 --format=%ct) ) / 86400 ))
+          echo "Days since last commit: $days"
+
+          if [ "$days" -lt 45 ]; then
+            echo "Recent enough, nothing to do."
+            exit 0
+          fi
+
+          mkdir -p .github
+          date -u +"%Y-%m-%dT%H:%M:%SZ" > .github/keepalive
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/keepalive
+          git commit -m "chore: keep scheduled workflows enabled"
+          git push origin HEAD:main
