@@ -1,14 +1,14 @@
 name: Supabase keepalive
 
 # Supabase pauses free-tier projects after 7 days without database activity.
-# This workflow queries the database every 3 days to keep it awake.
+# This workflow queries the database daily to keep it awake.
 #
 # GitHub disables scheduled workflows after 60 days without new commits, so the
 # second step writes a timestamp and commits it when the repo has been quiet.
 
 on:
   schedule:
-    - cron: "0 6 */3 * *"
+    - cron: "0 6 * * *"
   workflow_dispatch:
 
 jobs:
@@ -25,11 +25,36 @@ jobs:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
         run: |
+          if [ -z "$SUPABASE_URL" ] || [ -z "$SUPABASE_KEY" ]; then
+            echo "::error::SUPABASE_URL or SUPABASE_KEY secret is missing"
+            exit 1
+          fi
+
+          host=$(echo "${SUPABASE_URL#*://}" | cut -d/ -f1)
           body="$RUNNER_TEMP/response.json"
-          status=$(curl -sS -o "$body" -w "%{http_code}" \
-            -H "apikey: $SUPABASE_KEY" \
-            -H "Authorization: Bearer $SUPABASE_KEY" \
-            "${SUPABASE_URL%/}/rest/v1/exercises?select=*&limit=1")
+
+          # Runners hit occasional DNS/network blips, so retry before crying wolf.
+          for attempt in 1 2 3; do
+            status=$(curl -sS -o "$body" -w "%{http_code}" \
+              --connect-timeout 15 --max-time 45 \
+              -H "apikey: $SUPABASE_KEY" \
+              -H "Authorization: Bearer $SUPABASE_KEY" \
+              "${SUPABASE_URL%/}/rest/v1/exercises?select=*&limit=1") && curl_rc=0 || curl_rc=$?
+
+            [ "$curl_rc" = "0" ] && break
+            echo "Attempt $attempt failed (curl exit $curl_rc)"
+            [ "$attempt" != "3" ] && sleep 15
+          done
+
+          if [ "$curl_rc" != "0" ]; then
+            case "$curl_rc" in
+              6)  echo "::error::DNS lookup for $host failed on all attempts. The subdomain is gone, which means the Supabase project is paused or deleted — check https://supabase.com/dashboard" ;;
+              7)  echo "::error::Connection to $host refused — the Supabase project is likely down" ;;
+              28) echo "::error::Request to $host timed out" ;;
+              *)  echo "::error::curl failed with exit code $curl_rc" ;;
+            esac
+            exit 1
+          fi
 
           echo "HTTP $status"
           if [ "$status" != "200" ]; then
